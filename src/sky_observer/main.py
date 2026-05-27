@@ -1,5 +1,10 @@
+from sky_observer.app import App
+
+
 def main():
-    print("Hello from sky-observer!")
+  app = App()
+  app.run()
+
 
 if __name__ == "__main__":
-    main()
+  main()
