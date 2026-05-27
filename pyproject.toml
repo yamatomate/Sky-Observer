@@ -1,7 +1,7 @@
 [project]
 name = "sky-observer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Usando sua localização, nosso app avalia o clima e a qualidade do céu em tempo real. Encontre objetos celestes visíveis e receba instruções simples para calibrar seu telescópio."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -15,5 +15,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pyinstaller>=6.20.0",
     "ruff>=0.15.14",
 ]
