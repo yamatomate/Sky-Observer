@@ -1,12 +1,13 @@
 # Sky Observer
 
-## Sobre
+Avalia o clima e a qualidade do céu em tempo real com base na sua localização. Identifica objetos celestes visíveis e fornece instruções para calibração do telescópio.
 
-Usando sua localização, nosso app avalia o clima e a qualidade do céu em tempo real. Encontre objetos celestes visíveis e receba instruções simples para calibrar seu telescópio.
+## Requisitos
 
-## Como executar o projeto
+- Python 3.13+
+- [UV](https://docs.astral.sh/uv/)
 
-### 1. Instalar o UV
+## Instalação
 
 **Windows (PowerShell):**
 ```powershell
@@ -18,32 +19,44 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-> Confirme que instalou rodando `uv --version`.
+Confirme a instalação:
+```bash
+uv --version
+```
 
-### 2. Instalar as dependências
+## Como usar
 
-Na raiz do projeto, execute:
-
+Instale as dependências:
 ```bash
 uv sync
 ```
 
-Isso cria o ambiente virtual (`.venv`) e baixa todas as dependências listadas no `pyproject.toml`.
-
-### 3. Rodar o projeto
-
+Execute o projeto:
 ```bash
-uv run python src/main.py
+uv run start
 ```
 
-Só isso. O `uv run` executa no ambiente virtual automaticamente
-
-### Comandos úteis
+## Comandos úteis
 
 | Comando | O que faz |
 |---|---|
 | `uv sync` | Instala/atualiza dependências |
+| `uv run start` | Executa o projeto |
 | `uv add <pacote>` | Adiciona nova dependência |
 | `uv remove <pacote>` | Remove dependência |
-| `uv run <comando>` | Executa sem ativar o venv |
 | `uv tree` | Mostra árvore de dependências |
+
+## Estrutura
+
+```
+sky-observer/
+├── src/
+│   └── sky_observer/
+│       ├── __init__.py
+│       ├── main.py
+│       └── infra/
+│           ├── openmeteo/
+│           └── skyfield/
+├── pyproject.toml
+└── README.md
+```

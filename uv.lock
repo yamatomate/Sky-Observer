@@ -600,7 +600,7 @@ wheels = [
 [[package]]
 name = "sky-observer"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "numpy" },
     { name = "openmeteo-requests" },
