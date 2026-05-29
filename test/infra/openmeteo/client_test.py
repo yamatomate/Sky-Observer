@@ -11,7 +11,7 @@ logger = getLogger(__name__)
 
 
 @patch("sky_observer.infra.openmeteo.client.openmeteo_requests")
-def test_weather_data_response_success(mock_client):
+def test_weather_data_response_success(mock_client: MagicMock):
   # Arrange
   mock_current = MagicMock()
 
@@ -72,7 +72,7 @@ def test_weather_data_response_success(mock_client):
 
 
 @patch("sky_observer.infra.openmeteo.client.niquests_cache.CachedSession")
-def test_search_location_success(mock_cached_session_cls):
+def test_search_location_success(mock_cached_session_cls: MagicMock):
   # Arrange
   mock_http_response = MagicMock()
 
