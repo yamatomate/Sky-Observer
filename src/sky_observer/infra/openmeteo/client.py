@@ -21,6 +21,8 @@ class WeatherDataResponse:
   weather_code: int
   weather_description: str
   wind_speed_kmh: float
+  visibility_m: float
+  is_day: bool
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,11 @@ class LocationResponse:
   name: str
   latitude: float
   longitude: float
+  elevation: float
+  country: str
+  country_code: str
+  timezone: str
+  population: int
 
 
 class OpenMeteoClient:
@@ -61,6 +68,8 @@ class OpenMeteoClient:
             "precipitation",
             "weather_code",
             "wind_speed_10m",
+            "visibility",
+            "is_day",
           ],
         },
       )
@@ -76,7 +85,7 @@ class OpenMeteoClient:
       return None
 
     values: list[float] = []
-    for i in range(6):
+    for i in range(8):
       var = current.Variables(i)
       if var is None:
         logger.warning("Resposta do OpenMeteo com variáveis faltando no índice %d", i)
@@ -92,6 +101,8 @@ class OpenMeteoClient:
       weather_code=code,
       weather_description=WMO_CODES.get(code, "Desconhecido"),
       wind_speed_kmh=values[5],
+      visibility_m=values[6],
+      is_day=bool(values[7]),
     )
 
   def search_location(self, name: str) -> LocationResponse | None:
@@ -117,6 +128,11 @@ class OpenMeteoClient:
         name=name,
         latitude=results[0]["latitude"],
         longitude=results[0]["longitude"],
+        elevation=results[0]["elevation"],
+        country=results[0]["country"],
+        country_code=results[0]["country_code"],
+        timezone=results[0]["timezone"],
+        population=results[0]["population"],
       )
     except Exception as e:
       logger.error("Falha ao buscar localização: %s", e)
