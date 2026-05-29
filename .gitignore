@@ -11,3 +11,6 @@ wheels/
 
 # Build artifacts
 *.spec
+
+# Jetbrains .idea folder
+.idea/
