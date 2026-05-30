@@ -1,5 +1,5 @@
-from observacao import Observacao
-from observacao_repository import ObservacaoRepository
+from .observacao import Observacao
+from .observacao_repository import ObservacaoRepository
 from datetime import datetime
 
 class ObservacaoService:

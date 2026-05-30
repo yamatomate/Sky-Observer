@@ -1,5 +1,5 @@
-from connection import get_connection
-from observacao import Observacao
+from .connection import get_connection
+from .observacao import Observacao
 
 class ObservacaoRepository:
     def __init__(self):
