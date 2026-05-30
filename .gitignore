@@ -11,3 +11,10 @@ wheels/
 
 # Build artifacts
 *.spec
+
+# Database
+*.db
+*.sqlite
+
+# temp test file
+test.py
