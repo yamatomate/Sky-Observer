@@ -60,7 +60,7 @@ class SkyFieldClient:
     horario: por padrão será usado o atual"""
 
     alvo = None
-    if latitude == None and longitude == None:
+    if latitude is None and longitude is None:
       latitude = self.posicao_atual[0]
       longitude = self.posicao_atual[1]
 
@@ -83,9 +83,3 @@ class SkyFieldClient:
       return [chaves for chaves in self.observaveis]
     elif modo == 2:
       return self.EPH
-
-
-if __name__ == "__main__":
-  teste = SkyFieldClient(latitude=-7.016852, longitude=-42.130789)
-  print(teste.observable_objects())
-  print(teste.search_object("Mars", latitude=-7.016852, longitude=-42.130789))
