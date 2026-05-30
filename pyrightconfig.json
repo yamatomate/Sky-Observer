@@ -7,4 +7,5 @@
   "reportUnknownVariableType": false,
   "reportUnknownArgumentType": false,
   "reportUnknownLambdaType": false,
+  "reportAny": false,
 }

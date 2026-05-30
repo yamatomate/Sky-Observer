@@ -16,3 +16,9 @@ wheels/
 # BSP
 *.bsp
 
+# Database
+*.db
+*.sqlite
+
+# temp test file
+test.py
