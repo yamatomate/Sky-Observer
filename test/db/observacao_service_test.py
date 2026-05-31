@@ -1,14 +1,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from sky_observer.db.observacao_service import ObservacaoService
+from sky_observer.db.location_service import LocationService
 
-class ObservacaoServiceTest(unittest.TestCase):
+class LocationServiceTest(unittest.TestCase):
     def setUp(self):
-        patcher = patch("sky_observer.db.observacao_service.ObservacaoRepository")
+        patcher = patch("sky_observer.db.location_service.LocationRepository")
         self.MockRepo = patcher.start()
         self.mock_repo = MagicMock()
         self.MockRepo.return_value = self.mock_repo
-        self.service = ObservacaoService()
+        self.service = LocationService()
         self.addCleanup(patcher.stop)
 
     def test_registrar_coordenadas_validas(self):
@@ -29,12 +29,12 @@ class ObservacaoServiceTest(unittest.TestCase):
 
     def test_update(self):
         self.mock_repo.update.return_value = 1
-        rows = self.service.update(obs_id=1, name="Test", latitude=55.0, longitude=55.0)
+        rows = self.service.update(loc_id=1, name="Test", latitude=55.0, longitude=55.0)
         self.assertGreaterEqual(1, rows)
 
     def test_delete(self):
         self.mock_repo.delete.return_value = 1
-        rows = self.service.delete(obs_id=1)
+        rows = self.service.delete(loc_id=1)
         self.assertGreaterEqual(1, rows)
 
 if __name__ == "__main__":

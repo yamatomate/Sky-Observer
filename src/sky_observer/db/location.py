@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-# Entidade que representa a tabela Observacao no SQLite
+# Entidade que representa a tabela location no SQLite
 @dataclass
-class Observacao:
+class Location:
     name: str
     latitude: float
     longitude: float

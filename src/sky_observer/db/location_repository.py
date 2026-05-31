@@ -1,7 +1,7 @@
 from .connection import get_connection
-from .observacao import Observacao
+from .location import Location
 
-class ObservacaoRepository:
+class LocationRepository:
     def __init__(self):
         self.conn = get_connection()
         self._create_table()
@@ -9,7 +9,7 @@ class ObservacaoRepository:
     def _create_table(self):
         # Executa a instrução de criar tabela, chamando o cursor implicitamente
         self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS observacoes (
+            CREATE TABLE IF NOT EXISTS locations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 latitude REAL NOT NULL,
@@ -21,30 +21,30 @@ class ObservacaoRepository:
         self.conn.commit()
 
     # Insere dados na tabela e retorna o id da ultima linha inserida
-    def insert(self, obs: Observacao) -> int:
+    def insert(self, loc: Location) -> int:
         cursor = self.conn.execute(
-            "INSERT INTO observacoes (name, latitude, longitude, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (obs.name, obs.latitude, obs.longitude, obs.created_at.isoformat(), obs.updated_at.isoformat())
+            "INSERT INTO locations (name, latitude, longitude, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (loc.name, loc.latitude, loc.longitude, loc.created_at.isoformat(), loc.updated_at.isoformat())
         )
         self.conn.commit()
         return cursor.lastrowid
 
-    # Lista todos os dados como objetos de Observacao
-    def list_all(self) -> list[Observacao]:
-        rows = self.conn.execute("SELECT * FROM observacoes ORDER BY created_at DESC").fetchall()
-        return [self._row_to_obs(row) for row in rows]
+    # Lista todos os dados como objetos de Location
+    def list_all(self) -> list[Location]:
+        rows = self.conn.execute("SELECT * FROM locations ORDER BY created_at DESC").fetchall()
+        return [self._row_to_loc(row) for row in rows]
 
-    def list_one(self, obs_id: int) -> Observacao:
+    def list_one(self, loc_id: int) -> Location:
         cursor = self.conn.execute("""
-            SELECT * FROM observacoes WHERE id = ?
-        """, (obs_id,))
+            SELECT * FROM locations WHERE id = ?
+        """, (loc_id,))
         row = cursor.fetchone()
-        return self._row_to_obs(row)
+        return self._row_to_loc(row)
 
-    # Transforma os dados como objetos de Observacao ao invés de rows brutas de SQL (Data Mapper)
-    def _row_to_obs(self, row) -> Observacao:
+    # Transforma os dados como objetos de Location ao invés de rows brutas de SQL (Data Mapper)
+    def _row_to_loc(self, row) -> Location:
         from datetime import datetime
-        return Observacao(
+        return Location(
             id=row["id"],
             name=row["name"],
             latitude=row["latitude"],
@@ -54,19 +54,19 @@ class ObservacaoRepository:
         )
 
     # Incompleto...
-    def update(self, obs: Observacao) -> int:
+    def update(self, loc: Location) -> int:
         cursor = self.conn.execute("""
-            UPDATE observacoes
+            UPDATE locations
             SET name = ?, latitude = ?, longitude = ?, updated_at = ?
             WHERE id = ?
-        """, (obs.name, obs.latitude, obs.longitude, obs.updated_at.isoformat(), obs.id))
+        """, (loc.name, loc.latitude, loc.longitude, loc.updated_at.isoformat(), loc.id))
         self.conn.commit()
         return cursor.rowcount
 
     # Deleta um atributo por id
-    def delete(self, obs_id: int) -> int:
+    def delete(self, loc_id: int) -> int:
         cursor = self.conn.execute("""
-            DELETE FROM observacoes WHERE id = ?
-        """, (obs_id,))
+            DELETE FROM locations WHERE id = ?
+        """, (loc_id,))
         self.conn.commit()
         return cursor.rowcount
