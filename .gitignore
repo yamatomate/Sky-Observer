@@ -8,6 +8,17 @@ wheels/
 
 # Virtual environments
 .venv
+.zed
 
 # Build artifacts
 *.spec
+
+# BSP
+*.bsp
+
+# Database
+*.db
+*.sqlite
+
+# temp test file
+test.py

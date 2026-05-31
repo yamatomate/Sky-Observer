@@ -5,10 +5,11 @@ description = "Usando sua localização, nosso app avalia o clima e a qualidade 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "niquests>=3.18.8",
+    "niquests-cache>=0.2.4",
     "numpy>=2.4.6",
     "openmeteo-requests>=1.7.5",
     "pandas>=3.0.3",
-    "requests-cache>=1.3.2",
     "retry-requests>=2.0.0",
     "skyfield>=1.54",
 ]
@@ -19,6 +20,7 @@ start = "sky_observer.main:main"
 [dependency-groups]
 dev = [
     "pyinstaller>=6.20.0",
+    "pytest>=9.0.3",
     "ruff>=0.15.14",
 ]
 
