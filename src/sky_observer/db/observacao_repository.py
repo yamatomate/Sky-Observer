@@ -34,6 +34,13 @@ class ObservacaoRepository:
         rows = self.conn.execute("SELECT * FROM observacoes ORDER BY created_at DESC").fetchall()
         return [self._row_to_obs(row) for row in rows]
 
+    def list_one(self, obs_id: int) -> Observacao:
+        cursor = self.conn.execute("""
+            SELECT * FROM observacoes WHERE id = ?
+        """, (obs_id,))
+        row = cursor.fetchone()
+        return self._row_to_obs(row)
+
     # Transforma os dados como objetos de Observacao ao invés de rows brutas de SQL (Data Mapper)
     def _row_to_obs(self, row) -> Observacao:
         from datetime import datetime
@@ -45,3 +52,21 @@ class ObservacaoRepository:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
+
+    # Incompleto...
+    def update(self, obs: Observacao) -> int:
+        cursor = self.conn.execute("""
+            UPDATE observacoes
+            SET name = ?, latitude = ?, longitude = ?, updated_at = ?
+            WHERE id = ?
+        """, (obs.name, obs.latitude, obs.longitude, obs.updated_at.isoformat(), obs.id))
+        self.conn.commit()
+        return cursor.rowcount
+
+    # Deleta um atributo por id
+    def delete(self, obs_id: int) -> int:
+        cursor = self.conn.execute("""
+            DELETE FROM observacoes WHERE id = ?
+        """, (obs_id,))
+        self.conn.commit()
+        return cursor.rowcount

@@ -25,3 +25,22 @@ class ObservacaoService:
 
     def list(self) -> list[Observacao]:
         return self.repo.list_all()
+
+    def update(self, obs_id: int, name: str, latitude: float, longitude: float):
+        # Busca a observação a ser atualizada (original) pelo seu id
+        original = self.repo.list_one(obs_id)
+        if original is None:
+            raise ValueError(f"Observação {obs_id} não encontrada")
+
+        original.name = name
+        original.latitude = latitude
+        original.longitude = longitude
+        original.updated_at = datetime.now()
+
+        return self.repo.update(original)
+
+    def delete(self, obs_id: int):
+        deleted_rows = self.repo.delete(obs_id)
+        if deleted_rows == 0:
+            raise ValueError(f"Observação com id {obs_id} não encontrada.")
+        return deleted_rows
