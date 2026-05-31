@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from src.sky_observer.db.observacao_service import ObservacaoService
+from sky_observer.db.observacao_service import ObservacaoService
 
 class ObservacaoServiceTest(unittest.TestCase):
     def setUp(self):
-        patcher = patch("src.sky_observer.db.observacao_service.ObservacaoRepository")
+        patcher = patch("sky_observer.db.observacao_service.ObservacaoRepository")
         self.MockRepo = patcher.start()
         self.mock_repo = MagicMock()
         self.MockRepo.return_value = self.mock_repo

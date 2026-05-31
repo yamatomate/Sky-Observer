@@ -2,15 +2,15 @@ import unittest
 import sqlite3
 from unittest.mock import patch
 from datetime import datetime
-from src.sky_observer.db.observacao_repository import ObservacaoRepository
-from src.sky_observer.db.observacao import Observacao
+from sky_observer.db.observacao_repository import ObservacaoRepository
+from sky_observer.db.observacao import Observacao
 
 class ObservacaoRepositoryTest(unittest.TestCase):
     def setUp(self):
         conn = sqlite3.connect(':memory:')
         conn.row_factory = sqlite3.Row
 
-        patcher = patch('src.sky_observer.db.observacao_repository.get_connection')
+        patcher = patch('sky_observer.db.observacao_repository.get_connection')
         self.MockConn = patcher.start()
         self.MockConn.return_value = conn
         self.repository = ObservacaoRepository()
