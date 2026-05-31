@@ -30,3 +30,40 @@ class ObservacaoRepositoryTest(unittest.TestCase):
         results = self.repository.list_all()
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].latitude, 50.0)
+
+    def test_update(self):
+        obs = Observacao(
+                         id=1,
+                         name="Test",
+                         latitude=50.0,
+                         longitude=100.0,
+                         created_at=datetime.now(),
+                         updated_at=datetime.now()
+                         )
+        self.repository.insert(obs)
+
+        obs.name = "Updated"
+        obs.latitude = 55.0
+        obs.longitude = 100.0
+        obs.updated_at = datetime.now()
+
+        rowcount = self.repository.update(obs)
+        self.assertEqual(rowcount, 1)
+
+    def test_delete(self):
+        obs = Observacao(
+            id=1,
+            name="Test",
+            latitude=50.0,
+            longitude=100.0,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        self.repository.insert(obs)
+        obs_id = obs.id
+
+        rowcount = self.repository.delete(obs_id)
+        self.assertEqual(rowcount, 1)
+
+if __name__ == "__main__":
+    unittest.main()

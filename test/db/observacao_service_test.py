@@ -27,5 +27,15 @@ class ObservacaoServiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.register(name="Teste", latitude=-5.08, longitude=999)
 
+    def test_update(self):
+        self.mock_repo.update.return_value = 1
+        rows = self.service.update(obs_id=1, name="Test", latitude=55.0, longitude=55.0)
+        self.assertGreaterEqual(1, rows)
+
+    def test_delete(self):
+        self.mock_repo.delete.return_value = 1
+        rows = self.service.delete(obs_id=1)
+        self.assertGreaterEqual(1, rows)
+
 if __name__ == "__main__":
     unittest.main()
