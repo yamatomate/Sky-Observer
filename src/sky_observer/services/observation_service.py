@@ -8,6 +8,7 @@ from sky_observer.services.models import (
   CelestialObject,
   CityResult,
   ConditionsResult,
+  SkyMetrics,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,75 @@ class ObservationService:
 
   # Openmeteo + SkyField
   def get_conditions(self, lat: float, lon: float, name: str) -> ConditionsResult:
-    pass
+    """Obtém as condições atuais para a localização.
+
+    Args:
+      lat: Latitude da localização.
+      lon: Longitude da localização.
+      name: Nome da localização.
+
+    Returns:
+      ConditionsResult com as condições atuais.
+
+      ConditionsResult:
+        location: Nome da localização.
+        score: Score de observação (0-100).
+        status: Status da observação (good, fair, bad).
+        title: Título descritivo.
+        subtitle: Subtítulo descritivo.
+        metrics: Métricas do céu.
+          cloud_cover: Cobertura de nuvens (0-100).
+          seeing: Seeing (0-100).
+          humidity: Umidade (0-100).
+          moon_phase: Fase da lua (0-100).
+        planets: Planetas visíveis.
+    """
+    # Openmeteo
+    weather = self.openmeteo_client.get_weather(lat, lon)
+    if not weather:
+      raise ValueError(
+        "Não foi possivel obter dados meteorológicos para esta localização"
+      )
+
+    score = self._calculate_score(
+      cloud=weather.cloud_cover_pct,
+      humidity=weather.humidity_pct,
+      visibility=weather.visibility_m,
+    )
+
+    status = self._score_to_status(score)
+
+    titles = {
+      "good": ("Céu Excelente", "Condições perfeitas para observar o cosmos hoje!"),
+      "fair": (
+        "Céu Regular",
+        "Algumas nuvens ou umidade podem atrapalhar a observação.",
+      ),
+      "bad": ("Céu Ruim", "Condições desfavoráveis. Melhor planejar para outro dia."),
+    }
+    title, subtitle = titles[status]
+
+    # SkyField
+    metrics = SkyMetrics(
+      cloud_cover=...,
+      seeing=...,
+      humidity=...,
+      moon_phase=...,
+    )
+
+    # planets = self.skyfield_client.planetas
+
+    # Depois da uma olhada no documento que o Thiago escreveu em:
+    # ui/docs/INTEGRATION_GUIDE.md
+    return ConditionsResult(
+      location=name,
+      score=int(score),
+      status=status,
+      title=title,
+      subtitle=subtitle,
+      metrics=metrics,
+      planets=planets,
+    )
 
   # SkyField
   def get_visible_objects(self, lat: float, lon: float) -> list[CelestialObject]:
