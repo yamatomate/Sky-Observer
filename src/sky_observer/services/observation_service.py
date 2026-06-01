@@ -1,12 +1,16 @@
+import logging
+
 from sky_observer.db.location_service import LocationService
 from sky_observer.infra.openmeteo.client import OpenMeteoClient
 from sky_observer.infra.skyfield.client import SkyFieldClient
-
 from sky_observer.services.models import (
   CelestialObject,
   CityResult,
   ConditionsResult,
 )
+
+logger = logging.getLogger(__name__)
+
 
 class ObservationService:
   location_service: LocationService
@@ -34,6 +38,21 @@ class ObservationService:
 
   # OpenMeteo
   def search_location(self, query: str) -> CityResult | None:
+    try:
+      result = self.openmeteo_client.search_location(query)
+
+      if result is not None:
+        return CityResult(
+          name=result.name,
+          latitude=result.latitude,
+          longitude=result.longitude,
+          country=result.country,
+        )
+
+      return None
+    except Exception as e:
+      logger.exception(f"Failed to search location: {e}")
+      pass
     pass
 
   # Formula que gera o score de 0-100
