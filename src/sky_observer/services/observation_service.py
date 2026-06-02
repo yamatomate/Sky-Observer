@@ -1,19 +1,17 @@
 import logging
+from time import time
 from typing import Literal
-
-import skyfield
-import skyfield.units
-from skyfield.relativity import C
 
 from sky_observer.db.location_service import LocationService
 from sky_observer.infra.openmeteo.client import OpenMeteoClient
-from sky_observer.infra.skyfield.client import AllObjectResponse, SkyFieldClient
+from sky_observer.infra.skyfield.client import AllObjectResponse, SkyFieldClient, SkyFieldClientError
 from sky_observer.services.models import (
   CelestialObject,
   CityResult,
   ConditionsResult,
   SkyMetrics,
 )
+from skyfield.timelib import Time
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +78,13 @@ class ObservationService:
 
     # SkyField
     metrics = SkyMetrics(
-      cloud_cover=...,
-      seeing=...,
-      humidity=...,
-      moon_phase=...,
+      cloud_cover=str(weather.cloud_cover_pct),
+      seeing="6",  # juntar score + escuridao
+      humidity=str(weather.humidity_pct),
+      moon_phase=f"{self.skyfield_client.get_moon_phase(self.skyfield_client.get_time_now()).phase:.2f}",
     )
 
-    # planets = self.skyfield_client.planetas
+    planets = self.skyfield_client.get_all_observable_objects()
 
     # Depois da uma olhada no documento que o Thiago escreveu em:
     # ui/docs/INTEGRATION_GUIDE.md
@@ -101,23 +99,28 @@ class ObservationService:
     )
 
   # SkyField
-  def get_visible_objects(self, lat: float, lon: float) -> list[CelestialObject]:
-    self.skyfield_client.set_location(lat, lon)
-    obejtos_celestes: list[AllObjectResponse] = (
-      self.skyfield_client.get_all_observable_objects()
+  def get_visible_objects(self, lat: float, lon: float, horario : Time) -> list[CelestialObject]:
+    if horario is None:
+      horario = self.skyfield_client.get_time_now()
+
+    objetos_celestes: AllObjectResponse | SkyFieldClientError= (
+      self.skyfield_client.get_all_observable_objects(
+        horario=horario, latitude=lat, longitude=lon
+      )
     )
+
+    if objetos_celestes is SkyFieldClientError:
+      return None
+    
     celestiais: list[CelestialObject] = []
-    print(obejtos_celestes)
-    for x in obejtos_celestes:
-      if x.altitude.degrees > skyfield.units.Angle(degrees=1).degrees:
-        celestiais.append(
-          CelestialObject(
-            name=x.name,
-            icon="",
-            type="planeta",
-            details=f"Alt. {x.altitude.degrees:.2f}º Az. {x.azimuth.degrees:.2f}º",
-          )
+    for x in objetos_celestes.objects:
+      celestiais.append(
+        CelestialObject(
+          name=x.name,
+          details=f"Alt. {x.altitude:.2f}º Az. {x.azimuth:.2f}º",
+          status= "green" if x.visible else "red"
         )
+      )
     return celestiais
 
   # Openmeteo + SkyField
@@ -190,5 +193,8 @@ class ObservationService:
 
 if __name__ == "__main__":
   teste = ObservationService()
-  objetos = teste.get_visible_objects(lat=0, lon=0)
-  print(objetos)
+  objetos = teste.get_visible_objects(lat=0, lon=0, horario=None)
+  for x in objetos:
+    print(x)
+
+  teste.get_conditions(lat=0, lon=0, name="")

@@ -27,14 +27,12 @@ class ConditionsResult:
   planets: list[PlanetVisibility]
   is_object_context: bool = False
 
-
+# {"name": "Saturno", "detail": "Alt. 62°  ·  Az. 188°  ·  20h15 – 02h30", "status": "green"}
 @dataclass(frozen=True)
 class CelestialObject:
-  icon: str
   name: str
-  type: str
   details: str
-
+  status : str
 
 @dataclass(frozen=True)
 class CityResult:
