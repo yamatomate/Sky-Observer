@@ -1,12 +1,16 @@
 from dataclasses import dataclass
+
 from skyfield import api, units
-from skyfield.api import N, W, Angle, load, wgs84
+from skyfield.api import Angle, N, W, load, wgs84
+
 
 @dataclass(frozen=True)
 class SearchObjectResponse:
+  name: str
   visible: bool
   altitude: Angle
   azimuth: Angle
+
 
 @dataclass(frozen=True)
 class AllObjectResponse:
@@ -21,6 +25,7 @@ class SearchObjectError:
   error: int
   message: str
 
+
 """
 Primeiro passe a lua localização logituginal e latituninal.
 Por padrão o planeta que voce estara sera a terra.
@@ -33,8 +38,8 @@ coisa que vc pode fazer:
 
 
 class SkyFieldClient:
-  posicao_atual : tuple[float, float]
-  escala_tempo : api.Timescale
+  posicao_atual: tuple[float, float]
+  escala_tempo: api.Timescale
 
   def __init__(self, with_earth=False) -> None:
     self.escala_tempo = load.timescale()
@@ -65,10 +70,11 @@ class SkyFieldClient:
         "Urano": EPH[7],
         "Netuno": EPH[8],
       }
-    
+
     self.satelites = {"Lua": EPH["Moon"]}
     self.extra = {"Plutão": EPH[9]}
     self.observaveis = self.planetas | self.satelites | self.extra
+    self.posicao_atual = None
 
   def set_location(self, latitude: float = 0.0, logitude: float = 0.0):
     self.posicao_atual = (latitude, logitude)
@@ -89,11 +95,12 @@ class SkyFieldClient:
       alvo = self.observaveis[objeto]
     elif objeto in self._EPH and objeto != 0:
       alvo = self._EPH[objeto]
-    elif self.posicao_atual == None:
-      # alvo não foi nem encotrado na lista de observaveis e nem na EPH
-      return SearchObjectError(error=1, message="Posicao atual não definida")
     else:
       return SearchObjectError(error=2, message="Objeto não encontrado")
+
+    if self.posicao_atual == None:
+      # alvo não foi nem encotrado na lista de observaveis e nem na EPH
+      return SearchObjectError(error=1, message="Posicao atual não definida")
 
     latitude = self.posicao_atual[0]
     longitude = self.posicao_atual[1]
@@ -103,9 +110,11 @@ class SkyFieldClient:
     alti, azi, dis = astrometric.apparent().altaz()
     vis = alti.degrees > units.Angle(degrees=1).degrees
 
-    return SearchObjectResponse(visible=vis, altitude=alti, azimuth=azi)
+    return SearchObjectResponse(name=objeto ,visible=vis, altitude=alti, azimuth=azi)
 
-  def list_all_observable_objects(self, horario : load.timescale = load.timescale().now()):
+  def get_all_observable_objects(
+    self, horario: load.timescale = load.timescale().now()
+  ) -> list[AllObjectResponse] | SearchObjectError:
     if self.posicao_atual == None:
       # alvo não foi nem encotrado na lista de observaveis e nem na EPH
       return SearchObjectError(error=1, message="Posicao atual não definida")
@@ -117,22 +126,16 @@ class SkyFieldClient:
 
     objetos = []
     for key, value in self.observaveis.items():
-      print(key)
       astrometric = local_observacao.at(horario).observe(value)
       alti, azi, dis = astrometric.apparent().altaz()
       vis = alti.degrees > units.Angle(degrees=1).degrees
-      objetos.append(AllObjectResponse(name=key,visible=vis, altitude=alti, azimuth=azi))
-
-    print(objetos)
+      objetos.append(
+        AllObjectResponse(name=key, visible=vis, altitude=alti, azimuth=azi)
+      )
+    return objetos
 
   def observable_objects(self, modo: int = 1):
     if modo == 1:
       return [chaves for chaves in self.observaveis]
     elif modo == 2:
       return self._EPH
-
-if __name__ == "__main__":
-  client = SkyFieldClient()
-  client.set_location(latitude=0,logitude=0)
-  print(client.search_object(objeto="Moon"))
-  print(client.list_all_observable_objects())
