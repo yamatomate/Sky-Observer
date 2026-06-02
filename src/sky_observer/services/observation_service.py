@@ -1,9 +1,13 @@
 import logging
 from typing import Literal
 
+import skyfield
+import skyfield.units
+from skyfield.relativity import C
+
 from sky_observer.db.location_service import LocationService
 from sky_observer.infra.openmeteo.client import OpenMeteoClient
-from sky_observer.infra.skyfield.client import SkyFieldClient
+from sky_observer.infra.skyfield.client import AllObjectResponse, SkyFieldClient
 from sky_observer.services.models import (
   CelestialObject,
   CityResult,
@@ -22,7 +26,7 @@ class ObservationService:
   def __init__(self):
     self.location_service = LocationService()
     self.openmeteo_client = OpenMeteoClient()
-    self.skyfield_client = SkyFieldClient(0.0, 0.0)
+    self.skyfield_client = SkyFieldClient()
 
   # Openmeteo + SkyField
   def get_conditions(self, lat: float, lon: float, name: str) -> ConditionsResult:
@@ -98,7 +102,23 @@ class ObservationService:
 
   # SkyField
   def get_visible_objects(self, lat: float, lon: float) -> list[CelestialObject]:
-    pass
+    self.skyfield_client.set_location(lat, lon)
+    obejtos_celestes: list[AllObjectResponse] = (
+      self.skyfield_client.get_all_observable_objects()
+    )
+    celestiais: list[CelestialObject] = []
+    print(obejtos_celestes)
+    for x in obejtos_celestes:
+      if x.altitude.degrees > skyfield.units.Angle(degrees=1).degrees:
+        celestiais.append(
+          CelestialObject(
+            name=x.name,
+            icon="",
+            type="planeta",
+            details=f"Alt. {x.altitude.degrees:.2f}º Az. {x.azimuth.degrees:.2f}º",
+          )
+        )
+    return celestiais
 
   # Openmeteo + SkyField
   def get_object_detail(
@@ -166,3 +186,9 @@ class ObservationService:
     elif score >= 45:
       return "fair"
     return "bad"
+
+
+if __name__ == "__main__":
+  teste = ObservationService()
+  objetos = teste.get_visible_objects(lat=0, lon=0)
+  print(objetos)
