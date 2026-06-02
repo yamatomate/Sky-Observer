@@ -1,17 +1,23 @@
 import logging
-from time import time
+from math import cos, radians
 from typing import Literal
+
+from skyfield.timelib import Time
 
 from sky_observer.db.location_service import LocationService
 from sky_observer.infra.openmeteo.client import OpenMeteoClient
-from sky_observer.infra.skyfield.client import AllObjectResponse, SkyFieldClient, SkyFieldClientError
+from sky_observer.infra.skyfield.client import (
+  AllObjectResponse,
+  SkyFieldClient,
+  SkyFieldClientError,
+)
 from sky_observer.services.models import (
   CelestialObject,
   CityResult,
   ConditionsResult,
+  PlanetVisibility,
   SkyMetrics,
 )
-from skyfield.timelib import Time
 
 logger = logging.getLogger(__name__)
 
@@ -76,18 +82,50 @@ class ObservationService:
     }
     title, subtitle = titles[status]
 
-    # SkyField
+    # Calcular seeing dinamicamente baseado no score (escala de 1 a 8)
+    seeing_val = max(1, min(8, round((score / 100.0) * 8)))
+
+    # Calcular fase da lua em porcentagem de iluminação
+    moon_info = self.skyfield_client.get_moon_phase(self.skyfield_client.get_time_now())
+    illumination_pct = 50.0 * (1.0 - cos(radians(moon_info.phase)))
+
+    # SkyMetrics espera strings descritivas
     metrics = SkyMetrics(
-      cloud_cover=str(weather.cloud_cover_pct),
-      seeing="6",  # juntar score + escuridao
-      humidity=str(weather.humidity_pct),
-      moon_phase=f"{self.skyfield_client.get_moon_phase(self.skyfield_client.get_time_now()).phase:.2f}",
+      cloud_cover=f"{weather.cloud_cover_pct:.0f}",
+      seeing=str(seeing_val),
+      humidity=f"{weather.humidity_pct:.0f}",
+      moon_phase=f"{illumination_pct:.0f}",
     )
 
-    planets = self.skyfield_client.get_all_observable_objects()
+    # Obter os objetos celestes usando as coordenadas reais da localização
+    planets_response = self.skyfield_client.get_all_observable_objects(
+      latitude=lat, longitude=lon
+    )
 
-    # Depois da uma olhada no documento que o Thiago escreveu em:
-    # ui/docs/INTEGRATION_GUIDE.md
+    planets_visibility: list[PlanetVisibility] = []
+    if not isinstance(planets_response, SkyFieldClientError):
+      for obj in planets_response.objects:
+        # Determinar a cor do status para a UI
+        if not obj.visible:
+          p_status = "red"
+        elif obj.altitude > 15.0:
+          p_status = "green"
+        else:
+          p_status = "yellow"
+
+        # Detalhes do objeto formatados conforme esperado pela view
+        detail_str = f"Alt. {obj.altitude:.0f}°  ·  Az. {obj.azimuth:.0f}°"
+
+        planets_visibility.append(
+          PlanetVisibility(
+            name=obj.name,
+            detail=detail_str,
+            status=p_status,
+          )
+        )
+    else:
+      logger.error(f"Erro ao obter planetas observáveis: {planets_response.message}")
+
     return ConditionsResult(
       location=name,
       score=int(score),
@@ -95,30 +133,32 @@ class ObservationService:
       title=title,
       subtitle=subtitle,
       metrics=metrics,
-      planets=planets,
+      planets=planets_visibility,
     )
 
   # SkyField
-  def get_visible_objects(self, lat: float, lon: float, horario : Time) -> list[CelestialObject]:
+  def get_visible_objects(
+    self, lat: float, lon: float, horario: Time
+  ) -> list[CelestialObject]:
     if horario is None:
       horario = self.skyfield_client.get_time_now()
 
-    objetos_celestes: AllObjectResponse | SkyFieldClientError= (
+    objetos_celestes: AllObjectResponse | SkyFieldClientError = (
       self.skyfield_client.get_all_observable_objects(
         horario=horario, latitude=lat, longitude=lon
       )
     )
 
-    if objetos_celestes is SkyFieldClientError:
-      return None
-    
+    if isinstance(objetos_celestes, SkyFieldClientError):
+      return []
+
     celestiais: list[CelestialObject] = []
     for x in objetos_celestes.objects:
       celestiais.append(
         CelestialObject(
           name=x.name,
           details=f"Alt. {x.altitude:.2f}º Az. {x.azimuth:.2f}º",
-          status= "green" if x.visible else "red"
+          status="green" if x.visible else "red",
         )
       )
     return celestiais
@@ -189,12 +229,3 @@ class ObservationService:
     elif score >= 45:
       return "fair"
     return "bad"
-
-
-if __name__ == "__main__":
-  teste = ObservationService()
-  objetos = teste.get_visible_objects(lat=0, lon=0, horario=None)
-  for x in objetos:
-    print(x)
-
-  teste.get_conditions(lat=0, lon=0, name="")

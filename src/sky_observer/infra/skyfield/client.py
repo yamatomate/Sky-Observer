@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import Any
 
 # import skyfield # Ruffs reclamando
-from skyfield import api, units
-from skyfield.api import Angle, N, Timescale, W, load, wgs84
+from skyfield import api
+from skyfield.api import N, Timescale, W, load, wgs84
 from skyfield.framelib import ecliptic_frame
 from skyfield.timelib import Time
 
@@ -14,8 +14,8 @@ class ObjectCelest:
   name: str
   type: str
   visible: bool
-  altitude: Angle
-  azimuth: Angle
+  altitude: float
+  azimuth: float
 
 
 @dataclass(frozen=True)
@@ -99,7 +99,7 @@ class SkyFieldClient:
 
     if objeto in self.observaveis:
       alvo = self.observaveis[objeto]
-      tipo = self.metadados[objeto]
+      tipo = self.metadados[objeto]["tipo"]
     else:
       return SkyFieldClientError(error=2, message="Objeto não encontrado")
 
@@ -113,7 +113,7 @@ class SkyFieldClient:
 
     return SearchObjectResponse(
       objeto=ObjectCelest(
-        name=objeto, type=tipo, altitude=alti, azimuth=azi, visible=vis
+        name=objeto, type=tipo, altitude=alti.degrees, azimuth=azi.degrees, visible=vis
       )
     )
 
