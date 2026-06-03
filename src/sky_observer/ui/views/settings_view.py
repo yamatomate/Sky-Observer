@@ -12,6 +12,8 @@ class SettingsView(tk.Frame):
         self.widgets = {}
         self._build()
         self._load_dummy_data()
+        # Inicializa com dados padrão por enquanto
+        self.update_display({"temp_unit": "°C", "time_format": "24h"})
 
     def _build(self):
         self._create_topbar()

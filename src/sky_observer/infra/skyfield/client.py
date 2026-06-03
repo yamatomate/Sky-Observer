@@ -50,8 +50,8 @@ class SkyFieldClient:
   def search_object(
     self,
     objeto="Moon",
-    latitude: float = None,
-    longitude: float = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
     horario=load.timescale().now(),
   ):
     """Verificar se no na hora passada se o objeto está visivel no ceu da terra.\n
@@ -76,7 +76,7 @@ class SkyFieldClient:
     astrometric = local_observacao.at(horario).observe(alvo)
     alt, az, d = astrometric.apparent().altaz()
     vis = alt.degrees > units.Angle(degrees=1).degrees
-    return ObjetoVisivelResponse(vis, alt, az)
+    return ObjetoVisivelResponse(vis, alt.degrees, az.degrees)
 
   def observable_objects(self, modo: int = 1):
     if modo == 1:

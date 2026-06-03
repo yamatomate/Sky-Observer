@@ -76,7 +76,6 @@ class ConditionsView(tk.Frame):
         self.widgets["location"] = pill
 
     def _date_buttons(self, parent):
-        # Botão "Hoje" (ativo)
         btn_today = tk.Label(
             parent,
             text="Hoje",
@@ -85,47 +84,18 @@ class ConditionsView(tk.Frame):
             fg=COLORS["blue"],
             padx=10,
             pady=4,
-            cursor="hand2",
         )
         btn_today.pack(side=tk.LEFT, padx=2)
-        self.widgets["btn_today"] = btn_today
 
-        # Botão "Amanhã"
-        btn_tomorrow = tk.Label(
-            parent,
-            text="Amanhã",
-            font=FONTS["small"],
-            bg=COLORS["bg_primary"],
-            fg=COLORS["text_secondary"],
-            padx=10,
-            pady=4,
-            cursor="hand2",
-        )
-        btn_tomorrow.pack(side=tk.LEFT, padx=2)
-        self.widgets["btn_tomorrow"] = btn_tomorrow
-
-    def bind_events(self, on_location_click, on_date_click, on_back_click=None):
+    def bind_events(self, on_location_click, on_back_click=None):
         """
         Conecta os eventos de clique desta view às funções do controlador (MainWindow).
         Isso garante que a View não toma decisões de negócio, apenas "avisa" que algo foi clicado.
         """
         if "location" in self.widgets:
             self.widgets["location"].bind("<Button-1>", lambda e: on_location_click())
-        if "btn_today" in self.widgets:
-            self.widgets["btn_today"].bind("<Button-1>", lambda e: on_date_click("today"))
-        if "btn_tomorrow" in self.widgets:
-            self.widgets["btn_tomorrow"].bind("<Button-1>", lambda e: on_date_click("tomorrow"))
         if "btn_back" in self.widgets:
             self.widgets["btn_back"].bind("<Button-1>", lambda e: on_back_click() if on_back_click else None)
-
-    def set_active_date(self, date_type: str):
-        """Altera o visual do botão de data ativo."""
-        if date_type == "today":
-            self.widgets["btn_today"].config(bg=COLORS["blue_bg"], fg=COLORS["blue"])
-            self.widgets["btn_tomorrow"].config(bg=COLORS["bg_primary"], fg=COLORS["text_secondary"])
-        else:
-            self.widgets["btn_today"].config(bg=COLORS["bg_primary"], fg=COLORS["text_secondary"])
-            self.widgets["btn_tomorrow"].config(bg=COLORS["blue_bg"], fg=COLORS["blue"])
 
     # ── Área rolável ──────────────────────────────────────
     def _create_scrollable_content(self):
