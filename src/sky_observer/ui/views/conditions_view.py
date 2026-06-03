@@ -13,7 +13,6 @@ class ConditionsView(tk.Frame):
         # Dicionário para guardar referências apenas dos widgets que vão mudar de valor/texto.
         self.widgets = {}  
         self._build()
-        self._load_dummy_data()  # TODO: Remover em produção. Apenas mock para design.
 
     def _build(self):
         self._create_topbar()
