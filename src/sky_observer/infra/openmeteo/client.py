@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, cast
 
-import niquests_cache
+import niquests
 import openmeteo_requests
 from niquests.typing import QueryParameterType
 from urllib3.util import Retry
@@ -39,21 +39,28 @@ class LocationResponse:
 
 class OpenMeteoClient:
   base_url: str
-  cached_session: niquests_cache.CachedSession
+  session: niquests.Session
   client: openmeteo_requests.Client
 
-  def __init__(self, base_url: str = "https://api.open-meteo.com/v1/forecast"):
+  def __init__(
+    self,
+    base_url: str = "https://api.open-meteo.com/v1/forecast",
+  ):
     self.base_url = base_url
+
     retries_config = Retry(
-      total=3, backoff_factor=0.2, status_forcelist=[500, 502, 503, 504]
+      total=3,
+      backoff_factor=0.2,
+      status_forcelist=[500, 502, 503, 504],
     )
-    self.cached_session = niquests_cache.CachedSession(
-      ".cache", expire_after=300, retries=retries_config
-    )
-    self.client = openmeteo_requests.Client(session=self.cached_session)
+
+    self.session = niquests.Session(retries=retries_config)
+    self.client = openmeteo_requests.Client(session=self.session)
 
   def get_weather(
-    self, latitude: float, longitude: float
+    self,
+    latitude: float,
+    longitude: float,
   ) -> WeatherDataResponse | None:
     try:
       responses = self.client.weather_api(
@@ -85,14 +92,21 @@ class OpenMeteoClient:
       return None
 
     values: list[float] = []
+
     for i in range(8):
       var = current.Variables(i)
+
       if var is None:
-        logger.warning("Resposta do OpenMeteo com variáveis faltando no índice %d", i)
+        logger.warning(
+          "Resposta do OpenMeteo com variáveis faltando no índice %d",
+          i,
+        )
         return None
+
       values.append(float(var.Value()))
 
     code = int(values[4])
+
     return WeatherDataResponse(
       temperature_c=values[0],
       humidity_pct=values[1],
@@ -105,7 +119,10 @@ class OpenMeteoClient:
       is_day=bool(values[7]),
     )
 
-  def search_location(self, name: str) -> LocationResponse | None:
+  def search_location(
+    self,
+    name: str,
+  ) -> LocationResponse | None:
     try:
       params: QueryParameterType = {
         "name": name,
@@ -114,26 +131,32 @@ class OpenMeteoClient:
         "format": "json",
       }
 
-      response = self.cached_session.get(
+      response = self.session.get(
         "https://geocoding-api.open-meteo.com/v1/search",
         params=params,
       )
+
       response.raise_for_status()
 
-      json_data = cast(dict[str, Any], response.json())  # pyright: ignore[reportExplicitAny]
+      json_data = cast(dict[str, Any], response.json())
       results = json_data.get("results")
+
       if not results:
         return None
+
+      result = results[0]
+
       return LocationResponse(
-        name=name,
-        latitude=results[0]["latitude"],
-        longitude=results[0]["longitude"],
-        elevation=results[0]["elevation"],
-        country=results[0]["country"],
-        country_code=results[0]["country_code"],
-        timezone=results[0]["timezone"],
-        population=results[0]["population"],
+        name=result["name"],
+        latitude=result["latitude"],
+        longitude=result["longitude"],
+        elevation=result["elevation"],
+        country=result["country"],
+        country_code=result["country_code"],
+        timezone=result["timezone"],
+        population=result.get("population", 0),
       )
+
     except Exception as e:
       logger.error("Falha ao buscar localização: %s", e)
       return None
