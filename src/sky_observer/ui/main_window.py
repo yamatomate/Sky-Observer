@@ -56,7 +56,8 @@ class MainWindow:
   def _initialize_heavy_components(self):
     # LocationService para CRUD de locais (list/register) — não exposto no ObservationService
     self.location_service = LocationService()
-    self.current_location = None
+    saved_locs = self.location_service.list()
+    self.current_location = saved_locs[0] if saved_locs else None
 
     # Fila de tarefas para o worker thread dedicado
     self._task_queue = queue.Queue()
@@ -114,6 +115,9 @@ class MainWindow:
     self._init_frames()
     self._navigate("conditions")
 
+    if self.current_location:
+      self._update_conditions_data()
+
   def _init_frames(self):
     """
     Inicializa todas as telas (views) uma única vez e as empilha na mesma célula do grid.
@@ -135,7 +139,11 @@ class MainWindow:
     self.frames["objects"] = obj_view
 
     loc_view = LocationsView(self.content_area)
-    loc_view.bind_events(on_add_click=self._on_add_location)
+    loc_view.bind_events(
+      on_add_click=self._on_add_location,
+      on_select_click=self._on_select_location,
+      on_delete_click=self._on_delete_location,
+    )
     self.frames["locations"] = loc_view
 
     set_view = SettingsView(self.content_area)
@@ -167,14 +175,53 @@ class MainWindow:
   def _load_locations(self):
     """Busca os locais no banco e injeta na LocationsView."""
     locs = self.location_service.list()
+    active_id = self.current_location.id if self.current_location else None
     data = {
       "locations": [
-        {"id": loc.id, "name": loc.name, "latitude": loc.latitude, "longitude": loc.longitude}
+        {
+          "id": loc.id,
+          "name": loc.name,
+          "latitude": loc.latitude,
+          "longitude": loc.longitude,
+          "active": (loc.id == active_id),
+        }
         for loc in locs
       ]
     }
     if "locations" in self.frames:
       self.frames["locations"].update_display(data)
+
+  def _on_select_location(self, loc_id):
+    """Seleciona a localização salva com o ID especificado e navega para Condições."""
+    locs = self.location_service.list()
+    selected_loc = None
+    for loc in locs:
+      if loc.id == loc_id:
+        selected_loc = loc
+        break
+    if selected_loc:
+      self._set_current_location(selected_loc)
+      self._load_locations()
+      # Navega visualmente para a tela de condições
+      self.sidebar.set_active("conditions")
+      self._navigate("conditions")
+
+  def _on_delete_location(self, loc_id):
+    """Exclui a localização salva com o ID especificado."""
+    if not messagebox.askyesno("Confirmar Exclusão", "Tem certeza que deseja remover esta localização?"):
+      return
+    try:
+      self.location_service.delete(loc_id)
+      if self.current_location and self.current_location.id == loc_id:
+        self.current_location = None
+        self.frames["conditions"].update_display({
+          "title": "Nenhum local selecionado",
+          "subtitle": "Selecione um local na aba 'Locais' ou no topo.",
+        })
+      self._load_locations()
+      messagebox.showinfo("Sucesso", "Localização removida com sucesso!")
+    except Exception as e:
+      messagebox.showerror("Erro", f"Falha ao remover localização: {e}")
 
   def _create_placeholder_frame(self, title, subtitle):
     """Tela temporária para páginas ainda não implementadas."""
