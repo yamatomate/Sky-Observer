@@ -88,10 +88,10 @@ class SkyFieldClient:
 
   def search_object(
     self,
-    objeto: str = "Lua",
-    latitude: float = 0,
-    longitude: float = 0,
-    horario: Time | None = None,
+    objeto="Moon",
+    latitude: float | None = None,
+    longitude: float | None = None,
+    horario=load.timescale().now(),
   ):
 
     alvo = None
@@ -108,46 +108,11 @@ class SkyFieldClient:
 
     local_observacao = self.eph["Earth"] + wgs84.latlon(latitude * N, longitude * W)
     astrometric = local_observacao.at(horario).observe(alvo)
-    alti, azi, dis = astrometric.apparent().altaz()
-    vis = alti.degrees > 1.0
+    alt, az, d = astrometric.apparent().altaz()
+    vis = alt.degrees > units.Angle(degrees=1).degrees
+    return ObjetoVisivelResponse(vis, alt.degrees, az.degrees)
 
-    return SearchObjectResponse(
-      objeto=ObjectCelest(
-        name=objeto, type=tipo, altitude=alti.degrees, azimuth=azi.degrees, visible=vis
-      )
-    )
-
-  def get_all_observable_objects(
-    self,
-    latitude: float = 0.0,
-    longitude: float = 0.0,
-    horario: Time | None = None,
-  ) -> AllObjectResponse | SkyFieldClientError:
-
-    local_observacao = self.eph["Earth"] + wgs84.latlon(latitude * N, longitude * W)
-
-    if horario is None:
-      horario = self.get_time_now()
-
-    objetos: AllObjectResponse = AllObjectResponse(objects=[])
-    planets = self.observaveis
-    tipo = self.metadados
-    for item in planets:
-      astrometric = local_observacao.at(horario).observe(planets[item])
-      alti, azi, dis = astrometric.apparent().altaz()
-      vis = alti.degrees > 1.0
-      objetos.objects.append(
-        ObjectCelest(
-          name=item,
-          visible=vis,
-          altitude=alti.degrees,
-          azimuth=azi.degrees,
-          type=tipo[item]["tipo"],
-        )
-      )
-    return objetos
-
-  def get_observable_objects(self, modo: int = 1):
+  def observable_objects(self, modo: int = 1):
     if modo == 1:
       return [chaves for chaves in self.observaveis]
     elif modo == 2:

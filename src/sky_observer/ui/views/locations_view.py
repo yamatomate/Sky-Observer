@@ -12,7 +12,6 @@ class LocationsView(tk.Frame):
         # Dicionário para armazenar elementos interativos
         self.widgets = {}
         self._build()
-        self._load_dummy_data()
 
     def _build(self):
         self._create_topbar()
@@ -84,7 +83,11 @@ class LocationsView(tk.Frame):
         info.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         tk.Label(info, text=item["name"], font=FONTS["subtitle"], bg=COLORS["bg_primary"], fg=COLORS["text_primary"], anchor="w").pack(fill=tk.X)
-        tk.Label(info, text=item["details"], font=FONTS["small"], bg=COLORS["bg_primary"], fg=COLORS["text_secondary"], anchor="w").pack(fill=tk.X)
+        
+        lat = item.get("latitude", 0.0)
+        lon = item.get("longitude", 0.0)
+        details_text = f"Lat: {lat:.4f}  ·  Lon: {lon:.4f}"
+        tk.Label(info, text=details_text, font=FONTS["small"], bg=COLORS["bg_primary"], fg=COLORS["text_secondary"], anchor="w").pack(fill=tk.X)
 
         is_active = item.get("active", False)
         btn_text = "⭐ Selecionado" if is_active else "Selecionar"
