@@ -1,14 +1,49 @@
+# import datetime # Ruffs reclamando
 from dataclasses import dataclass
+from typing import Any
 
-from skyfield import api, units
-from skyfield.api import N, W, load, wgs84
+# import skyfield # Ruffs reclamando
+from skyfield import api
+from skyfield.api import N, Timescale, W, load, wgs84
+from skyfield.framelib import ecliptic_frame
+from skyfield.timelib import Time
 
 
 @dataclass(frozen=True)
-class ObjetoVisivelResponse:
+class ObjectCelest:
+  name: str
+  type: str
   visible: bool
   altitude: float
   azimuth: float
+
+
+@dataclass(frozen=True)
+class SearchObjectResponse:
+  objeto: ObjectCelest
+
+
+@dataclass(frozen=True)
+class SkyFieldClientError:
+  error: int
+  message: str
+
+
+@dataclass(frozen=True)
+class AllObjectResponse:
+  objects: list[ObjectCelest]
+
+
+@dataclass(frozen=True)
+class PlanetsResult:
+  planets: Any
+
+
+@dataclass(frozen=True)
+class MoonDetail:
+  phase: float
+  phase_name: str
+
 
 """
 Primeiro passe a lua localização logituginal e latituninal.
@@ -20,32 +55,36 @@ coisa que vc pode fazer:
 - ver que horas o planeta "nasce" e se "poe"
 """
 
+
 class SkyFieldClient:
-  def __init__(self, latitude: float, longitude: float):
-    """Classe que simplfica a busca dos objetos no ceu. Use a função objetos_observaveis para saber todos os objetos observaveis disponivveis para calculo.\n
-    posicao (tupla): recebe dois valores a latitude e a logitude\nexemplo: (5.3444, 2.5555)"""
-    self.posicao_atual: tuple[float, float] = (latitude,longitude)
-    self.escala_tempo = load.timescale()
+  ts: Timescale
+  eph: Any
+  observaveis: Any
 
-    EPH = api.load("de421.bsp")
-    self.EPH = EPH
+  def __init__(self) -> None:
+    self.ts = load.timescale()
 
-    self.TERRA = EPH["Earth"]
-    planetas = {
-      "Mercúrio": EPH["Mercury"],
-      "Vênus": EPH["Venus"],
-      "Terra": EPH["Earth"],
-      "Marte": EPH["Mars"],
-      "Júpiter": EPH[5],
-      "Saturno": EPH[6],
-      "Urano": EPH[7],
-      "Netuno": EPH[8],
+    self.eph = api.load("de421.bsp")
+    self.observaveis = {
+      "Mercúrio": self.eph["MERCURY BARYCENTER"],
+      "Vênus": self.eph["VENUS BARYCENTER"],
+      "Marte": self.eph["MARS BARYCENTER"],
+      "Júpiter": self.eph["JUPITER BARYCENTER"],
+      "Saturno": self.eph["SATURN BARYCENTER"],
+      "Urano": self.eph["URANUS BARYCENTER"],
+      "Netuno": self.eph["NEPTUNE BARYCENTER"],
+      "Lua": self.eph["MOON"],
     }
-    self.planetas = planetas
-    self.satelites = {"Lua": EPH["Moon"]}
-    self.extra = {"Plutão": EPH[9]}
-
-    self.observaveis = self.planetas | self.satelites | self.extra
+    self.metadados = {
+      "Mercúrio": {"tipo": "planeta", "pai": "Sol"},
+      "Vênus": {"tipo": "planeta", "pai": "Sol"},
+      "Marte": {"tipo": "planeta", "pai": "Sol"},
+      "Júpiter": {"tipo": "planeta", "pai": "Sol"},
+      "Saturno": {"tipo": "planeta", "pai": "Sol"},
+      "Urano": {"tipo": "planeta", "pai": "Sol"},
+      "Netuno": {"tipo": "planeta", "pai": "Sol"},
+      "Lua": {"tipo": "satelite", "pai": "Terra"},
+    }
 
   def search_object(
     self,
@@ -54,25 +93,20 @@ class SkyFieldClient:
     longitude: float | None = None,
     horario=load.timescale().now(),
   ):
-    """Verificar se no na hora passada se o objeto está visivel no ceu da terra.\n
-    objeto: nome do objeto a ser observado\n
-    localizacao = (latitude, logitude): tupla que possui logitude e latitude\n
-    horario: por padrão será usado o atual"""
 
     alvo = None
-    if latitude is None and longitude is None:
-      latitude = self.posicao_atual[0]
-      longitude = self.posicao_atual[1]
+    tipo: str = ""
 
     if objeto in self.observaveis:
       alvo = self.observaveis[objeto]
-    elif objeto in self.EPH and objeto != 0:
-      alvo = self.EPH[objeto]
+      tipo = self.metadados[objeto]["tipo"]
     else:
-      # alvo não foi nem encotrado na lista de observaveis e nem na EPH
-      return None
+      return SkyFieldClientError(error=2, message="Objeto não encontrado")
 
-    local_observacao = self.TERRA + wgs84.latlon(latitude * N, longitude * W)
+    if horario is None:
+      horario = self.get_time_now()
+
+    local_observacao = self.eph["Earth"] + wgs84.latlon(latitude * N, longitude * W)
     astrometric = local_observacao.at(horario).observe(alvo)
     alt, az, d = astrometric.apparent().altaz()
     vis = alt.degrees > units.Angle(degrees=1).degrees
@@ -82,4 +116,59 @@ class SkyFieldClient:
     if modo == 1:
       return [chaves for chaves in self.observaveis]
     elif modo == 2:
-      return self.EPH
+      return self.eph
+
+  def get_time_utc(
+    self, ano: int, mes: int, dia: int, hora: int, minuto: int, segundo: int
+  ) -> Time:
+    return self.ts.utc(
+      year=ano, month=mes, day=dia, hour=hora, minute=minuto, second=segundo
+    )
+
+  def get_time_now(self) -> Time:
+    return self.ts.now()
+
+  def get_moon_phase(self, data: Time) -> MoonDetail:
+    sun, moon, earth = self.eph["sun"], self.eph["moon"], self.eph["earth"]
+
+    e = earth.at(data)
+    s = e.observe(sun).apparent()
+    m = e.observe(moon).apparent()
+
+    _, slon, _ = s.frame_latlon(ecliptic_frame)
+    _, mlon, _ = m.frame_latlon(ecliptic_frame)
+    phase = (mlon.degrees - slon.degrees) % 360.0
+
+    if phase < 1:
+      name = "Lua Nova"
+    elif phase < 90:
+      name = "Lua Crescente"
+    elif phase < 91:  # pequena tolerância para exatamente 90°
+      name = "Quarto Crescente"
+    elif phase < 180:
+      name = "Crescente Gibosa"
+    elif phase < 181:  # tolerância para 180°
+      name = "Lua Cheia"
+    elif phase < 270:
+      name = "Minguante Gibosa"
+    elif phase < 271:  # tolerância para 270°
+      name = "Quarto Minguante"
+    else:
+      name = "Minguante"
+    return MoonDetail(phase=float(phase), phase_name=name)
+
+
+if __name__ == "__main__":
+  # print(load.timescale())
+  # print(load.timescale().now())
+  # print(datetime.datetime)
+  # print(datetime.datetime.now())
+
+  client = SkyFieldClient()
+  result2 = client.search_object(
+    objeto="Lua", latitude=0, longitude=0, horario=client.get_time_now()
+  )
+  result = client.get_all_observable_objects(0, 0, load.timescale().now())
+  lua = client.get_moon_phase(client.get_time_now())
+  print(lua)
+  print(result)
