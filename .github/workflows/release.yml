@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   build-python:
     strategy:
@@ -21,6 +24,7 @@ jobs:
 
     name: Build Executable (${{ matrix.name }})
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 20
     env:
       PYTHONUTF8: "1"
     steps:
@@ -43,14 +47,25 @@ jobs:
       - name: Build with PyInstaller
         run: uv run build
 
-      - name: Rename Artifacts
+      - name: Rename and Compress Artifacts
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p renamed-artifacts
           if [ "${{ runner.os }}" = "Windows" ]; then
             cp dist/SkyObserver.exe renamed-artifacts/SkyObserver-${{ matrix.name }}.exe
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            cp dist/SkyObserver renamed-artifacts/SkyObserver-${{ matrix.name }}
+            cd renamed-artifacts
+            zip SkyObserver-${{ matrix.name }}.zip SkyObserver-${{ matrix.name }}
+            rm SkyObserver-${{ matrix.name }}
+            cd ..
           else
             cp dist/SkyObserver renamed-artifacts/SkyObserver-${{ matrix.name }}
+            cd renamed-artifacts
+            tar -czf SkyObserver-${{ matrix.name }}.tar.gz SkyObserver-${{ matrix.name }}
+            rm SkyObserver-${{ matrix.name }}
+            cd ..
           fi
           echo "=== Artifacts ==="
           ls -la renamed-artifacts/
@@ -75,8 +90,9 @@ jobs:
 
       - name: Generate changelog
         run: |
+          set -euo pipefail
           TAG="$GITHUB_REF_NAME"
-          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1)
+          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1 || true)
 
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$TAG" ]; then
             RANGE="$TAG"
@@ -146,9 +162,9 @@ jobs:
           printf '| Platform | Download |\n' >> changelog.md
           printf '|----------|----------|\n' >> changelog.md
           printf '| Windows (x64) | [`SkyObserver-windows-x64.exe`](%s/SkyObserver-windows-x64.exe) |\n' "$BASE" >> changelog.md
-          printf '| macOS (Apple Silicon) | [`SkyObserver-macos-arm64`](%s/SkyObserver-macos-arm64) |\n' "$BASE" >> changelog.md
-          printf '| macOS (Intel) | [`SkyObserver-macos-x64`](%s/SkyObserver-macos-x64) |\n' "$BASE" >> changelog.md
-          printf '| Linux (x64) | [`SkyObserver-linux-x64`](%s/SkyObserver-linux-x64) |\n' "$BASE" >> changelog.md
+          printf '| macOS (Apple Silicon) | [`SkyObserver-macos-arm64.zip`](%s/SkyObserver-macos-arm64.zip) |\n' "$BASE" >> changelog.md
+          printf '| macOS (Intel) | [`SkyObserver-macos-x64.zip`](%s/SkyObserver-macos-x64.zip) |\n' "$BASE" >> changelog.md
+          printf '| Linux (x64) | [`SkyObserver-linux-x64.tar.gz`](%s/SkyObserver-linux-x64.tar.gz) |\n' "$BASE" >> changelog.md
 
           echo "Generated changelog:"
           cat changelog.md
@@ -160,6 +176,7 @@ jobs:
 
       - name: Flatten artifacts
         run: |
+          set -euo pipefail
           mkdir -p release-files
           find artifacts -type f -exec cp {} release-files/ \;
           echo "=== Release files ==="
