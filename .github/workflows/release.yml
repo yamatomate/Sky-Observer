@@ -86,11 +86,11 @@ jobs:
 
           echo "Generating changelog for range: $RANGE"
 
-          FEATURES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^feat(\(.*\))?:" | sed -E 's/^feat(\([^)]*\))?: //' || true)
-          FIXES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^fix(\(.*\))?:" | sed -E 's/^fix(\([^)]*\))?: //' || true)
-          REFACTORS=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^refactor(\(.*\))?:" | sed -E 's/^refactor(\([^)]*\))?: //' || true)
-          STYLES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^style(\(.*\))?:" | sed -E 's/^style(\([^)]*\))?: //' || true)
-          PERFS=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^perf(\(.*\))?:" | sed -E 's/^perf(\([^)]*\))?: //' || true)
+          FEATURES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^feat(\(.*\))?:" | sed -E 's/^[a-zA-Z]+\(([^)]+)\):[[:space:]]*(.*)/**\1**: \2/; s/^[a-zA-Z]+:[[:space:]]*(.*)/\1/' || true)
+          FIXES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^fix(\(.*\))?:" | sed -E 's/^[a-zA-Z]+\(([^)]+)\):[[:space:]]*(.*)/**\1**: \2/; s/^[a-zA-Z]+:[[:space:]]*(.*)/\1/' || true)
+          REFACTORS=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^refactor(\(.*\))?:" | sed -E 's/^[a-zA-Z]+\(([^)]+)\):[[:space:]]*(.*)/**\1**: \2/; s/^[a-zA-Z]+:[[:space:]]*(.*)/\1/' || true)
+          STYLES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^style(\(.*\))?:" | sed -E 's/^[a-zA-Z]+\(([^)]+)\):[[:space:]]*(.*)/**\1**: \2/; s/^[a-zA-Z]+:[[:space:]]*(.*)/\1/' || true)
+          PERFS=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^perf(\(.*\))?:" | sed -E 's/^[a-zA-Z]+\(([^)]+)\):[[:space:]]*(.*)/**\1**: \2/; s/^[a-zA-Z]+:[[:space:]]*(.*)/\1/' || true)
 
           > changelog.md
 
