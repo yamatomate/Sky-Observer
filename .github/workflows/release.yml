@@ -12,16 +12,12 @@ jobs:
         include:
           - platform: macos-latest
             name: macos-arm64
-            prefix: ""
-          - platform: macos-latest
+          - platform: macos-15-intel
             name: macos-x64
-            prefix: "arch -x86_64"
           - platform: ubuntu-22.04
             name: linux-x64
-            prefix: ""
           - platform: windows-latest
             name: windows-x64
-            prefix: ""
 
     name: Build Executable (${{ matrix.name }})
     runs-on: ${{ matrix.platform }}
@@ -42,10 +38,10 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: ${{ matrix.prefix }} uv sync --all-groups
+        run: uv sync --all-groups
 
       - name: Build with PyInstaller
-        run: ${{ matrix.prefix }} uv run build
+        run: uv run build
 
       - name: Rename Artifacts
         shell: bash
