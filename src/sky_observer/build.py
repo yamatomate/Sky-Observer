@@ -62,17 +62,18 @@ def find_bsp() -> Path:
   for candidate in [BSP_FILE, Path.home() / ".skyfield" / BSP_FILE.name]:
     if candidate.exists():
       return candidate.resolve()
-  
-  print(f"📥 '{BSP_FILE.name}' não encontrado. Baixando via Skyfield...")
+
+  print(f"[INFO] '{BSP_FILE.name}' nao encontrado. Baixando via Skyfield...")
   try:
     from skyfield.api import load
+
     load(BSP_FILE.name)
     if BSP_FILE.exists():
       return BSP_FILE.resolve()
   except Exception as e:
-    print(f"❌ Falha ao baixar '{BSP_FILE.name}' automaticamente: {e}")
+    print(f"[ERRO] Falha ao baixar '{BSP_FILE.name}' automaticamente: {e}")
 
-  print(f"❌ '{BSP_FILE.name}' não encontrado. Execute 'uv run start' primeiro.")
+  print(f"[ERRO] '{BSP_FILE.name}' nao encontrado. Execute 'uv run start' primeiro.")
   sys.exit(1)
 
 
@@ -114,16 +115,16 @@ def build(*, console: bool = False, onedir: bool = False):
 
   mode = "onedir" if onedir else "onefile"
   win = "console" if console else "windowed"
-  print(f"🔨 Building {APP_NAME} ({mode}, {win})...")
+  print(f"[BUILD] Building {APP_NAME} ({mode}, {win})...")
 
   result = subprocess.run(cmd)
   if result.returncode != 0:
-    print("❌ Build falhou!")
+    print("[ERRO] Build falhou!")
     sys.exit(result.returncode)
 
   ext = ".exe" if platform.system() == "Windows" else ""
   output = Path("dist") / (APP_NAME if onedir else f"{APP_NAME}{ext}")
-  print(f"✅ Pronto! → {output.resolve()}")
+  print(f"[OK] Pronto! -> {output.resolve()}")
 
 
 def main():
