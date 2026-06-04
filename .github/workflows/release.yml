@@ -1,0 +1,172 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-python:
+    strategy:
+      matrix:
+        include:
+          - platform: macos-latest
+            name: macos-arm64
+          - platform: macos-13
+            name: macos-x64
+          - platform: ubuntu-22.04
+            name: linux-x64
+          - platform: windows-latest
+            name: windows-x64
+
+    name: Build Executable (${{ matrix.name }})
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build with PyInstaller
+        run: uv run build
+
+      - name: Rename Artifacts
+        shell: bash
+        run: |
+          mkdir -p renamed-artifacts
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp dist/SkyObserver.exe renamed-artifacts/SkyObserver-${{ matrix.name }}.exe
+          else
+            cp dist/SkyObserver renamed-artifacts/SkyObserver-${{ matrix.name }}
+          fi
+          echo "=== Artifacts ==="
+          ls -la renamed-artifacts/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkyObserver-${{ matrix.name }}
+          path: renamed-artifacts/*
+
+  release:
+    needs: build-python
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1)
+
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$TAG" ]; then
+            RANGE="$TAG"
+          else
+            RANGE="${PREV_TAG}..${TAG}"
+          fi
+
+          echo "Generating changelog for range: $RANGE"
+
+          FEATURES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^feat(\(.*\))?:" | sed -E 's/^feat(\([^)]*\))?: //' || true)
+          FIXES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^fix(\(.*\))?:" | sed -E 's/^fix(\([^)]*\))?: //' || true)
+          REFACTORS=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^refactor(\(.*\))?:" | sed -E 's/^refactor(\([^)]*\))?: //' || true)
+          STYLES=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^style(\(.*\))?:" | sed -E 's/^style(\([^)]*\))?: //' || true)
+          PERFS=$(git log $RANGE --pretty=format:"%s" --no-merges | grep -iE "^perf(\(.*\))?:" | sed -E 's/^perf(\([^)]*\))?: //' || true)
+
+          > changelog.md
+
+          if [ -n "$FEATURES" ]; then
+            printf '### Features\n' >> changelog.md
+            echo "$FEATURES" | while IFS= read -r line; do
+              printf -- '- %s\n' "$line" >> changelog.md
+            done
+            printf '\n' >> changelog.md
+          fi
+
+          if [ -n "$FIXES" ]; then
+            printf '### Bug Fixes\n' >> changelog.md
+            echo "$FIXES" | while IFS= read -r line; do
+              printf -- '- %s\n' "$line" >> changelog.md
+            done
+            printf '\n' >> changelog.md
+          fi
+
+          if [ -n "$REFACTORS" ]; then
+            printf '### Refactors\n' >> changelog.md
+            echo "$REFACTORS" | while IFS= read -r line; do
+              printf -- '- %s\n' "$line" >> changelog.md
+            done
+            printf '\n' >> changelog.md
+          fi
+
+          if [ -n "$STYLES" ]; then
+            printf '### Style\n' >> changelog.md
+            echo "$STYLES" | while IFS= read -r line; do
+              printf -- '- %s\n' "$line" >> changelog.md
+            done
+            printf '\n' >> changelog.md
+          fi
+
+          if [ -n "$PERFS" ]; then
+            printf '### Performance\n' >> changelog.md
+            echo "$PERFS" | while IFS= read -r line; do
+              printf -- '- %s\n' "$line" >> changelog.md
+            done
+            printf '\n' >> changelog.md
+          fi
+
+
+          if [ ! -s changelog.md ]; then
+            echo "Maintenance release." > changelog.md
+          fi
+
+          # append downloads table
+          TAG="$GITHUB_REF_NAME"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          printf '\n## Downloads\n\n' >> changelog.md
+          printf '| Platform | Download |\n' >> changelog.md
+          printf '|----------|----------|\n' >> changelog.md
+          printf '| Windows (x64) | [`SkyObserver-windows-x64.exe`](%s/SkyObserver-windows-x64.exe) |\n' "$BASE" >> changelog.md
+          printf '| macOS (Apple Silicon) | [`SkyObserver-macos-arm64`](%s/SkyObserver-macos-arm64) |\n' "$BASE" >> changelog.md
+          printf '| macOS (Intel) | [`SkyObserver-macos-x64`](%s/SkyObserver-macos-x64) |\n' "$BASE" >> changelog.md
+          printf '| Linux (x64) | [`SkyObserver-linux-x64`](%s/SkyObserver-linux-x64) |\n' "$BASE" >> changelog.md
+
+          echo "Generated changelog:"
+          cat changelog.md
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -exec cp {} release-files/ \;
+          echo "=== Release files ==="
+          ls -la release-files/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          name: SkyObserver ${{ github.ref_name }}
+          body_path: changelog.md
+          files: release-files/*
