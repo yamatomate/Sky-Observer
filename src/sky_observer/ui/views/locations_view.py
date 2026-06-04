@@ -51,13 +51,15 @@ class LocationsView(tk.Frame):
         btn_add.pack(side=tk.LEFT)
         self.widgets["btn_add"] = btn_add
 
-    def bind_events(self, on_add_click):
+    def bind_events(self, on_add_click, on_select_click=None, on_delete_click=None):
         """
-        Conecta o botão de adicionar local ao controlador (MainWindow).
-        Permite delegar a abertura de um modal ou busca para a classe principal.
+        Conecta os botões de adicionar, selecionar e apagar local ao controlador (MainWindow).
         """
+        self.on_add_click = on_add_click
+        self.on_select_click = on_select_click
+        self.on_delete_click = on_delete_click
         if "btn_add" in self.widgets:
-            self.widgets["btn_add"].bind("<Button-1>", lambda _e: on_add_click())
+            self.widgets["btn_add"].bind("<Button-1>", lambda _e: self.on_add_click())
 
     # ── Lista de Locais ───────────────────────────────────
     def _create_list_area(self):
@@ -89,10 +91,75 @@ class LocationsView(tk.Frame):
         details_text = f"Lat: {lat:.4f}  ·  Lon: {lon:.4f}"
         tk.Label(info, text=details_text, font=FONTS["small"], bg=COLORS["bg_primary"], fg=COLORS["text_secondary"], anchor="w").pack(fill=tk.X)
 
+        actions = tk.Frame(card, bg=COLORS["bg_primary"])
+        actions.pack(side=tk.RIGHT, fill=tk.Y)
+
         is_active = item.get("active", False)
-        btn_text = "⭐ Selecionado" if is_active else "Selecionar"
         
-        tk.Label(card, text=btn_text, font=FONTS["small"], bg=COLORS["green_bg"] if is_active else COLORS["bg_secondary"], fg=COLORS["green_text"] if is_active else COLORS["text_secondary"], padx=12, pady=6, cursor="hand2" if not is_active else "arrow").pack(side=tk.RIGHT)
+        if is_active:
+            # Badge de Selecionado
+            badge = tk.Label(
+                actions,
+                text="⭐ Selecionado",
+                font=FONTS["small"],
+                bg=COLORS["green_bg"],
+                fg=COLORS["green_text"],
+                padx=12,
+                pady=6
+            )
+            badge.pack(side=tk.LEFT, padx=(0, 8))
+        else:
+            # Botão de Selecionar
+            btn_select = tk.Label(
+                actions,
+                text="Selecionar",
+                font=FONTS["small"],
+                bg=COLORS["bg_secondary"],
+                fg=COLORS["text_secondary"],
+                padx=12,
+                pady=6,
+                cursor="hand2"
+            )
+            btn_select.pack(side=tk.LEFT, padx=(0, 8))
+            
+            # Hover effect para o botão Selecionar
+            def on_enter_select(_e, b=btn_select):
+                b.configure(bg=COLORS["blue_bg"], fg=COLORS["blue"])
+            def on_leave_select(_e, b=btn_select):
+                b.configure(bg=COLORS["bg_secondary"], fg=COLORS["text_secondary"])
+            
+            btn_select.bind("<Enter>", on_enter_select)
+            btn_select.bind("<Leave>", on_leave_select)
+            
+            # Clique
+            if hasattr(self, "on_select_click") and self.on_select_click:
+                btn_select.bind("<Button-1>", lambda _e, i_id=item["id"]: self.on_select_click(i_id))
+
+        # Botão de Excluir
+        btn_delete = tk.Label(
+            actions,
+            text="🗑️ Excluir",
+            font=FONTS["small"],
+            bg=COLORS["bg_secondary"],
+            fg=COLORS["text_muted"],
+            padx=12,
+            pady=6,
+            cursor="hand2"
+        )
+        btn_delete.pack(side=tk.LEFT)
+        
+        # Hover effect para o botão Excluir
+        def on_enter_delete(_e, b=btn_delete):
+            b.configure(bg=COLORS["red_bg"], fg=COLORS["red_text"])
+        def on_leave_delete(_e, b=btn_delete):
+            b.configure(bg=COLORS["bg_secondary"], fg=COLORS["text_muted"])
+            
+        btn_delete.bind("<Enter>", on_enter_delete)
+        btn_delete.bind("<Leave>", on_leave_delete)
+        
+        # Clique
+        if hasattr(self, "on_delete_click") and self.on_delete_click:
+            btn_delete.bind("<Button-1>", lambda _e, i_id=item["id"]: self.on_delete_click(i_id))
 
     def _load_dummy_data(self):
         self.update_display({

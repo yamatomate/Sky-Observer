@@ -1,353 +1,545 @@
+import queue
+import threading
 import tkinter as tk
 import tkinter.messagebox as messagebox
 import tkinter.simpledialog as simpledialog
 from typing import final
-from sky_observer.ui.theme import COLORS, toggle_theme
-from sky_observer.ui.components.sidebar import Sidebar
-from sky_observer.ui.views.conditions_view import ConditionsView
-from sky_observer.ui.views.objects_view import ObjectsView
-from sky_observer.ui.views.locations_view import LocationsView
-from sky_observer.ui.views.settings_view import SettingsView
-from sky_observer.db.connection import get_connection
+
 from sky_observer.db.location_service import LocationService
-from sky_observer.infra.openmeteo.client import OpenMeteoClient
-from sky_observer.infra.skyfield.client import SkyFieldClient
+from sky_observer.services.observation_service import ObservationService
+from sky_observer.ui.components.sidebar import Sidebar
+from sky_observer.ui.theme import COLORS, toggle_theme
+from sky_observer.ui.views.conditions_view import ConditionsView
+from sky_observer.ui.views.locations_view import LocationsView
+from sky_observer.ui.views.objects_view import ObjectsView
+from sky_observer.ui.views.settings_view import SettingsView
+
+observation_service: ObservationService | None = None
 
 
 @final
 class MainWindow:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Sky Observer")
-        self.root.geometry("900x620")
-        self.root.minsize(750, 500)
-        self.root.configure(bg=COLORS["bg_primary"])
+  def __init__(self):
+    self.root = tk.Tk()
+    self.root.title("Sky Observer")
+    self.root.geometry("900x620")
+    self.root.minsize(750, 500)
+    self.root.configure(bg=COLORS["bg_primary"])
 
-        # Mostra uma tela de carregamento (Splash Screen) inicial
-        self.loading_frame = tk.Frame(self.root, bg=COLORS["bg_primary"])
-        self.loading_frame.pack(fill=tk.BOTH, expand=True)
-        
-        tk.Label(
-            self.loading_frame,
-            text="🔭",
-            font=("Helvetica", 48),
-            bg=COLORS["bg_primary"]
-        ).pack(expand=True, side=tk.TOP, pady=(120, 10))
-        
-        tk.Label(
-            self.loading_frame,
-            text="Iniciando Sky Observer...",
-            font=("Helvetica", 16, "bold"),
-            bg=COLORS["bg_primary"],
-            fg=COLORS["text_primary"]
-        ).pack(side=tk.TOP)
-        
-        tk.Label(
-            self.loading_frame,
-            text="Sincronizando catálogos astronômicos (isso pode demorar na primeira vez)...",
-            font=("Helvetica", 10),
-            bg=COLORS["bg_primary"],
-            fg=COLORS["text_secondary"]
-        ).pack(side=tk.TOP, pady=(5, 120))
+    # Mostra uma tela de carregamento (Splash Screen) inicial
+    self.loading_frame = tk.Frame(self.root, bg=COLORS["bg_primary"])
+    self.loading_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Agenda a inicialização pesada para 100ms depois, permitindo que a tela de loading apareça
-        self.root.after(100, self._initialize_heavy_components)
+    tk.Label(
+      self.loading_frame, text="🔭", font=("Helvetica", 48), bg=COLORS["bg_primary"]
+    ).pack(expand=True, side=tk.TOP, pady=(120, 10))
 
-    def _initialize_heavy_components(self):
-        self.db_conn = get_connection()
-        self.location_service = LocationService()
+    tk.Label(
+      self.loading_frame,
+      text="Iniciando Sky Observer...",
+      font=("Helvetica", 16, "bold"),
+      bg=COLORS["bg_primary"],
+      fg=COLORS["text_primary"],
+    ).pack(side=tk.TOP)
 
-        # Inicializa clientes de API e gerência de estado (Aqui ocorre o download do .bsp)
-        self.weather_client = OpenMeteoClient()
-        self.skyfield_client = SkyFieldClient(0.0, 0.0)
+    tk.Label(
+      self.loading_frame,
+      text="Sincronizando catálogos astronômicos (isso pode demorar na primeira vez)...",
+      font=("Helvetica", 10),
+      bg=COLORS["bg_primary"],
+      fg=COLORS["text_secondary"],
+    ).pack(side=tk.TOP, pady=(5, 120))
+
+    # Agenda a inicialização pesada para 100ms depois, permitindo que a tela de loading apareça
+    self.root.after(100, self._initialize_heavy_components)
+
+  def _initialize_heavy_components(self):
+    # LocationService para CRUD de locais (list/register) — não exposto no ObservationService
+    self.location_service = LocationService()
+    saved_locs = self.location_service.list()
+    self.current_location = saved_locs[0] if saved_locs else None
+
+    # Fila de tarefas para o worker thread dedicado
+    self._task_queue = queue.Queue()
+
+    # Worker thread dedicado: cria e possui o ObservationService.
+    # Isso evita problemas de SQLite thread-safety do niquests_cache,
+    # pois todas as chamadas de rede ocorrem sempre na mesma thread.
+    self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+    self._worker.start()
+
+    # Destrói a tela de carregamento e monta a interface principal
+    self.loading_frame.destroy()
+    self._setup_ui()
+
+  def _worker_loop(self):
+    """Loop do worker thread dedicado. Cria o ObservationService nesta thread
+    para que o SQLite do niquests_cache seja acessado sempre da mesma thread."""
+    global observation_service
+    observation_service = ObservationService()
+    while True:
+      task = self._task_queue.get()
+      if task is None:
+        break
+      try:
+        task()
+      except Exception:
+        pass  # Erros já são tratados dentro de cada task
+
+  def _run_in_worker(self, task_fn):
+    """Despacha uma tarefa para o worker thread."""
+    self._task_queue.put(task_fn)
+
+  def _setup_ui(self):
+    # Frame principal divide a tela em sidebar + conteúdo
+    self.main_frame = tk.Frame(self.root, bg=COLORS["bg_primary"])
+    self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Sidebar à esquerda
+    self.sidebar = Sidebar(
+      self.main_frame, on_navigate=self._navigate, on_settings=self._on_settings_click
+    )
+    self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+
+    # Linha divisória entre sidebar e conteúdo
+    tk.Frame(self.main_frame, bg=COLORS["border"], width=1).pack(
+      side=tk.LEFT, fill=tk.Y
+    )
+
+    # Área de conteúdo à direita
+    self.content_area = tk.Frame(self.main_frame, bg=COLORS["bg_primary"])
+    self.content_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    self.content_area.grid_rowconfigure(0, weight=1)
+    self.content_area.grid_columnconfigure(0, weight=1)
+
+    self._init_frames()
+    self._navigate("conditions")
+
+    if self.current_location:
+      self._update_conditions_data()
+
+  def _init_frames(self):
+    """
+    Inicializa todas as telas (views) uma única vez e as empilha na mesma célula do grid.
+    Isso evita destruir e recriar os widgets, preservando o estado e melhorando a performance.
+    """
+    self.frames = {}
+
+    # Prepara todas as telas e injeta as funções de resposta (callbacks)
+    cond_view = ConditionsView(self.content_area)
+    cond_view.bind_events(
+      on_location_click=self._on_location_click, on_back_click=self._on_conditions_back
+    )
+    self.frames["conditions"] = cond_view
+
+    obj_view = ObjectsView(self.content_area)
+    obj_view.bind_events(
+      on_search=self._on_search_objects, on_object_select=self._on_object_select
+    )
+    self.frames["objects"] = obj_view
+
+    loc_view = LocationsView(self.content_area)
+    loc_view.bind_events(
+      on_add_click=self._on_add_location,
+      on_select_click=self._on_select_location,
+      on_delete_click=self._on_delete_location,
+    )
+    self.frames["locations"] = loc_view
+
+    set_view = SettingsView(self.content_area)
+    set_view.bind_events(
+      on_clear_cache=self._on_clear_cache,
+      on_toggle_setting=self._on_toggle_setting,
+      on_toggle_theme=self._on_toggle_theme,
+    )
+    self.frames["settings"] = set_view
+
+    # Posiciona todas na mesma célula (row=0, column=0) para sobreposição
+    for frame in self.frames.values():
+      frame.grid(row=0, column=0, sticky="nsew")
+
+  def _navigate(self, page):
+    """
+    Traz a tela solicitada para o topo (frente).
+    Como todas usam grid(row=0, column=0), o tkraise() faz com que
+    a tela desejada cubra as outras.
+    """
+    frame = self.frames.get(page)
+    if frame:
+      frame.tkraise()
+
+    # Dispara carregamento dinâmico ao abrir a tela de locais
+    if page == "locations":
+      self._load_locations()
+
+  def _load_locations(self):
+    """Busca os locais no banco e injeta na LocationsView."""
+    locs = self.location_service.list()
+    active_id = self.current_location.id if self.current_location else None
+    data = {
+      "locations": [
+        {
+          "id": loc.id,
+          "name": loc.name,
+          "latitude": loc.latitude,
+          "longitude": loc.longitude,
+          "active": (loc.id == active_id),
+        }
+        for loc in locs
+      ]
+    }
+    if "locations" in self.frames:
+      self.frames["locations"].update_display(data)
+
+  def _on_select_location(self, loc_id):
+    """Seleciona a localização salva com o ID especificado e navega para Condições."""
+    locs = self.location_service.list()
+    selected_loc = None
+    for loc in locs:
+      if loc.id == loc_id:
+        selected_loc = loc
+        break
+    if selected_loc:
+      self._set_current_location(selected_loc)
+      self._load_locations()
+      # Navega visualmente para a tela de condições
+      self.sidebar.set_active("conditions")
+      self._navigate("conditions")
+
+  def _on_delete_location(self, loc_id):
+    """Exclui a localização salva com o ID especificado."""
+    if not messagebox.askyesno("Confirmar Exclusão", "Tem certeza que deseja remover esta localização?"):
+      return
+    try:
+      self.location_service.delete(loc_id)
+      if self.current_location and self.current_location.id == loc_id:
         self.current_location = None
+        self.frames["conditions"].update_display({
+          "title": "Nenhum local selecionado",
+          "subtitle": "Selecione um local na aba 'Locais' ou no topo.",
+        })
+      self._load_locations()
+      messagebox.showinfo("Sucesso", "Localização removida com sucesso!")
+    except Exception as e:
+      messagebox.showerror("Erro", f"Falha ao remover localização: {e}")
 
-        # Destrói a tela de carregamento e monta a interface principal
-        self.loading_frame.destroy()
-        self._setup_ui()
+  def _create_placeholder_frame(self, title, subtitle):
+    """Tela temporária para páginas ainda não implementadas."""
+    frame = tk.Frame(self.content_area, bg=COLORS["bg_primary"])
 
-    def _setup_ui(self):
-        # Frame principal divide a tela em sidebar + conteúdo
-        self.main_frame = tk.Frame(self.root, bg=COLORS["bg_primary"])
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+    tk.Label(
+      frame,
+      text=title,
+      font=("Helvetica", 18, "bold"),
+      bg=COLORS["bg_primary"],
+      fg=COLORS["text_primary"],
+    ).pack(expand=True)
 
-        # Sidebar à esquerda
-        self.sidebar = Sidebar(
-            self.main_frame,
-            on_navigate=self._navigate,
-            on_settings=self._on_settings_click
-        )
-        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+    tk.Label(
+      frame,
+      text=subtitle,
+      font=("Helvetica", 12),
+      bg=COLORS["bg_primary"],
+      fg=COLORS["text_secondary"],
+    ).pack()
 
-        # Linha divisória entre sidebar e conteúdo
-        tk.Frame(self.main_frame, bg=COLORS["border"], width=1).pack(side=tk.LEFT, fill=tk.Y)
+    return frame
 
-        # Área de conteúdo à direita
-        self.content_area = tk.Frame(self.main_frame, bg=COLORS["bg_primary"])
-        self.content_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.content_area.grid_rowconfigure(0, weight=1)
-        self.content_area.grid_columnconfigure(0, weight=1)
+  # ── Controladores de Eventos (Event Handlers) ──────────
+  # Aqui é onde a equipe de backend deve integrar as chamadas da API (OpenMeteo, Skyfield, etc).
+  def _on_settings_click(self):
+    """Ação ao clicar na aba inferior de Configurações."""
+    self._navigate("settings")
 
-        self._init_frames()
-        self._navigate("conditions")
+  def _on_location_click(self):
+    """Abre um menu suspenso com as cidades salvas no banco."""
+    locs = self.location_service.list()
+    if not locs:
+      messagebox.showinfo(
+        "Localização", "Nenhum local salvo. Adicione cidades na aba 'Locais'."
+      )
+      return
 
-    def _init_frames(self):
-        """
-        Inicializa todas as telas (views) uma única vez e as empilha na mesma célula do grid.
-        Isso evita destruir e recriar os widgets, preservando o estado e melhorando a performance.
-        """
-        self.frames = {}
+    menu = tk.Menu(self.root, tearoff=0)
+    for loc in locs:
+      menu.add_command(
+        label=loc.name, command=lambda loc=loc: self._set_current_location(loc)
+      )
 
-        # Prepara todas as telas e injeta as funções de resposta (callbacks)
-        cond_view = ConditionsView(self.content_area)
-        cond_view.bind_events(
-            on_location_click=self._on_location_click,
-            on_back_click=self._on_conditions_back
-        )
-        self.frames["conditions"] = cond_view
-        
-        obj_view = ObjectsView(self.content_area)
-        obj_view.bind_events(
-            on_search=self._on_search_objects,
-            on_object_select=self._on_object_select
-        )
-        self.frames["objects"] = obj_view
-        
-        loc_view = LocationsView(self.content_area)
-        loc_view.bind_events(on_add_click=self._on_add_location)
-        self.frames["locations"] = loc_view
+    # Exibe o menu na exata posição em que o mouse clicou
+    x, y = self.root.winfo_pointerxy()
+    menu.tk_popup(x, y)
 
-        set_view = SettingsView(self.content_area)
-        set_view.bind_events(
-            on_clear_cache=self._on_clear_cache,
-            on_toggle_setting=self._on_toggle_setting,
-            on_toggle_theme=self._on_toggle_theme
-        )
-        self.frames["settings"] = set_view
+  def _set_current_location(self, loc):
+    """Atualiza o estado atual com a localização escolhida pelo usuário."""
+    self.current_location = loc
+    # Força a atualização automática dos dados climáticos para a nova cidade
+    self._update_conditions_data()
 
-        # Posiciona todas na mesma célula (row=0, column=0) para sobreposição
-        for frame in self.frames.values():
-            frame.grid(row=0, column=0, sticky="nsew")
+  def _update_conditions_data(self):
+    """Busca e atualiza os dados climáticos e astronômicos para a cidade atual via ObservationService."""
 
-    def _navigate(self, page):
-        """
-        Traz a tela solicitada para o topo (frente).
-        Como todas usam grid(row=0, column=0), o tkraise() faz com que
-        a tela desejada cubra as outras.
-        """
-        frame = self.frames.get(page)
-        if frame:
-            frame.tkraise()
-            
-        # Dispara carregamento dinâmico ao abrir a tela de locais
-        if page == "locations":
-            self._load_locations()
+    if not self.current_location:
+      messagebox.showwarning(
+        "Aviso", "Selecione um local em '📍 Selecione um local' primeiro."
+      )
+      return
 
-    def _load_locations(self):
-        """Busca os locais no banco e injeta na LocationsView."""
-        locs = self.location_service.list()
-        data = {
-            "locations": [{"id": l.id, "name": l.name, "latitude": l.latitude, "longitude": l.longitude} for l in locs]
-        }
-        if "locations" in self.frames:
-            self.frames["locations"].update_display(data)
+    # Captura os valores AGORA para evitar que o worker leia dados obsoletos
+    lat = self.current_location.latitude
+    lon = self.current_location.longitude
+    name = self.current_location.name
 
-    def _create_placeholder_frame(self, title, subtitle):
-        """Tela temporária para páginas ainda não implementadas."""
-        frame = tk.Frame(self.content_area, bg=COLORS["bg_primary"])
+    # Feedback visual de carregamento imediato
+    self.frames["conditions"].update_display(
+      {
+        "title": "Carregando dados...",
+        "subtitle": "Consultando clima e efemérides...",
+      }
+    )
 
-        tk.Label(
-            frame,
-            text=title,
-            font=("Helvetica", 18, "bold"),
-            bg=COLORS["bg_primary"],
-            fg=COLORS["text_primary"],
-        ).pack(expand=True)
+    def run_query(lat=lat, lon=lon, name=name):
+      try:
+        assert observation_service is not None
+        result = observation_service.get_conditions(lat, lon, name)
 
-        tk.Label(
-            frame,
-            text=subtitle,
-            font=("Helvetica", 12),
-            bg=COLORS["bg_primary"],
-            fg=COLORS["text_secondary"],
-        ).pack()
-        
-        return frame
-
-    # ── Controladores de Eventos (Event Handlers) ──────────
-    # Aqui é onde a equipe de backend deve integrar as chamadas da API (OpenMeteo, Skyfield, etc).
-    def _on_settings_click(self):
-        """Ação ao clicar na aba inferior de Configurações."""
-        self._navigate("settings")
-
-    def _on_location_click(self):
-        """Abre um menu suspenso com as cidades salvas no banco."""
-        locs = self.location_service.list()
-        if not locs:
-            messagebox.showinfo("Localização", "Nenhum local salvo. Adicione cidades na aba 'Locais'.")
-            return
-        
-        menu = tk.Menu(self.root, tearoff=0)
-        for loc in locs:
-            menu.add_command(label=loc.name, command=lambda l=loc: self._set_current_location(l))
-        
-        # Exibe o menu na exata posição em que o mouse clicou
-        x, y = self.root.winfo_pointerxy()
-        menu.tk_popup(x, y)
-
-    def _set_current_location(self, loc):
-        """Atualiza o estado atual com a localização escolhida pelo usuário."""
-        self.current_location = loc
-        # Força a atualização automática dos dados climáticos para a nova cidade
-        self._update_conditions_data()
-
-    def _update_conditions_data(self):
-        """Busca e atualiza os dados climáticos e astronômicos para a cidade atual."""
-        
-        if not self.current_location:
-            messagebox.showwarning("Aviso", "Selecione um local em '📍 Selecione um local' primeiro.")
-            return
-            
-        self.root.update_idletasks() # Dá um fôlego para a tela mostrar o carregamento
-        
-        # 1. Busca Clima
-        weather = self.weather_client.get_weather(self.current_location.latitude, self.current_location.longitude)
-        if not weather:
-            messagebox.showerror("Erro", "Não foi possível obter dados do clima para esta cidade.")
-            return
-            
-        score = 100 - int(weather.cloud_cover_pct)
-        status_color = "good" if score >= 70 else ("fair" if score >= 40 else "bad")
-        
-        # 2. Busca Planetas com Skyfield
-        planets_data = []
-        for p in ["Marte", "Júpiter", "Saturno", "Vênus"]:
-            obj = self.skyfield_client.search_object(p, self.current_location.latitude, self.current_location.longitude)
-            if obj:
-                planets_data.append({
-                    "name": p,
-                    "detail": f"Alt. {obj.altitude:.0f}° · Az. {obj.azimuth:.0f}°",
-                    "status": "green" if obj.visible else "red"
-                })
-                
-        # 3. Formata e envia para a View
         ui_data = {
-            "is_object_context": False,
-            "location": self.current_location.name,
-            "score": score,
-            "status": status_color,
-            "title": "Boas condições" if status_color == "good" else "Condições desfavoráveis",
-            "subtitle": weather.weather_description,
-            "metrics": {
-                "cloud_cover": f"{int(weather.cloud_cover_pct)}",
-                "seeing": "7",
-                "humidity": f"{int(weather.humidity_pct)}",
-                "moon_phase": "N/A",
-            },
-            "planets": planets_data
+          "is_object_context": False,
+          "location": result.location,
+          "score": result.score,
+          "status": result.status,
+          "title": result.title,
+          "subtitle": result.subtitle,
+          "metrics": {
+            "cloud_cover": result.metrics.cloud_cover,
+            "seeing": result.metrics.seeing,
+            "humidity": result.metrics.humidity,
+            "moon_phase": result.metrics.moon_phase,
+          },
+          "planets": [
+            {"name": p.name, "detail": p.detail, "status": p.status}
+            for p in result.planets
+          ],
         }
-        self.frames["conditions"].update_display(ui_data)
+        self.root.after(0, lambda: self.frames["conditions"].update_display(ui_data))
 
-    def _on_search_objects(self, query):
-        """Ação disparada ao clicar no botão buscar na tela de Objetos."""
-        if not query.strip():
-            messagebox.showwarning("Aviso", "Por favor, digite o nome de um objeto.")
-            return
+      except Exception as e:
+        err_msg = str(e)
+        self.root.after(
+          0,
+          lambda: messagebox.showerror(
+            "Erro", f"Falha ao carregar condições: {err_msg}"
+          ),
+        )
 
-        if not self.current_location:
-            messagebox.showwarning("Aviso", "Selecione um local na aba Condições primeiro.")
-            return
-            
-        self.root.update_idletasks()
-        
-        query_formatada = query.strip().capitalize()
-        obj = self.skyfield_client.search_object(query_formatada, self.current_location.latitude, self.current_location.longitude)
-        
-        if obj:
-            data = {
-                "results": [
-                    {
-                        "icon": "🔭",
-                        "name": query_formatada,
-                        "type": "Objeto Celeste",
-                        "details": f"Alt: {obj.altitude:.1f}° | Visível: {'Sim' if obj.visible else 'Não'}"
-                    }
-                ]
-            }
-            self.frames["objects"].update_display(data)
-        else:
-            messagebox.showinfo("Busca", f"Objeto '{query}' não encotrado nos catálogos.")
+    self._run_in_worker(run_query)
 
-    def _on_object_select(self, item):
-        """Ação ao clicar em um objeto na lista de busca."""
-        # Muda a navegação visual para 'conditions'
-        self.sidebar.set_active("conditions")
-        self._navigate("conditions")
-        
-        # Injeta dados fictícios direcionados ao objeto clicado
-        status_color = "good" if item["name"] in ["Lua", "Júpiter", "Saturno"] else "fair"
-        mock_data = {
-            "is_object_context": True,
-            "location": "Teresina, PI",
-            "score": 95 if status_color == "good" else 65,
-            "status": status_color,
-            "title": f"Observando: {item['name']}",
-            "subtitle": f"{item['type']} — {item['details']}",
-            "metrics": {
-                "cloud_cover": "5",
-                "seeing": "8",
-                "humidity": "42",
-                "moon_phase": "65",
-            },
-            "planets": [
-                {"name": item["name"], "detail": "Foco ajustado para este objeto.", "status": "green" if status_color == "good" else "yellow"}
+  def _on_search_objects(self, query):
+    """Ação disparada ao clicar no botão buscar na tela de Objetos."""
+    if not query.strip():
+      messagebox.showwarning("Aviso", "Por favor, digite o nome de um objeto.")
+      return
+
+    if not self.current_location:
+      messagebox.showwarning("Aviso", "Selecione um local na aba Condições primeiro.")
+      return
+
+    query_formatada = query.strip().capitalize()
+
+    # Captura os valores AGORA para evitar que o worker leia dados obsoletos
+    lat = self.current_location.latitude
+    lon = self.current_location.longitude
+
+    def run_search(lat=lat, lon=lon, query_formatada=query_formatada):
+      try:
+        assert observation_service is not None
+        all_objects = observation_service.get_visible_objects(lat, lon, horario=None)
+
+        matched = [
+          obj for obj in all_objects if query_formatada.lower() in obj.name.lower()
+        ]
+
+        if matched:
+          icon_map = {
+            "Lua": "🌕",
+            "Mercúrio": "☿️",
+            "Vênus": "♀️",
+            "Marte": "♂️",
+            "Júpiter": "♃",
+            "Saturno": "🪐",
+            "Urano": "⛢",
+            "Netuno": "♆",
+          }
+          data = {
+            "results": [
+              {
+                "icon": icon_map.get(obj.name, "🔭"),
+                "name": obj.name,
+                "type": "Objeto Celeste",
+                "details": f"{obj.details} | Visível: {'Sim' if obj.status == 'green' else 'Não'}",
+              }
+              for obj in matched
             ]
-        }
-        self.frames["conditions"].update_display(mock_data)
-
-    def _on_conditions_back(self):
-        """Ação ao clicar no botão voltar na tela de condições (quando olhando um objeto)."""
-        self.frames["conditions"]._load_dummy_data() # Restaura visão geral mockada
-        self.sidebar.set_active("objects")
-        self._navigate("objects")
-
-    def _on_add_location(self):
-        """Abre prompt de busca, consulta a API e salva no banco de dados."""
-        query = simpledialog.askstring("Adicionar Local", "Digite o nome da cidade (ex: São Paulo):")
-        if not query or not query.strip():
-            return
-            
-        self.root.update_idletasks() # Força a tela a não congelar caso a internet demore
-        
-        result = self.weather_client.search_location(query.strip())
-        if result:
-            self.location_service.register(
-                name=result.name,
-                latitude=result.latitude,
-                longitude=result.longitude
-            )
-            messagebox.showinfo("Sucesso", f"Local '{result.name}' ({result.country}) salvo com sucesso!")
-            
-            if self.sidebar.active_page == "locations":
-                self._load_locations()
+          }
+          self.root.after(0, lambda: self.frames["objects"].update_display(data))
         else:
-            messagebox.showerror("Erro", f"Não foi possível encontrar a cidade '{query}'.")
+          self.root.after(
+            0,
+            lambda: messagebox.showinfo(
+              "Busca", f"Objeto '{query_formatada}' não encontrado nos catálogos."
+            ),
+          )
 
-    def _on_toggle_theme(self):
-        """Altera entre o modo Claro e Escuro reconstruindo a interface de forma rápida."""
-        toggle_theme()
-        current_page = self.sidebar.active_page
-        
-        # Atualiza raiz e recria os componentes (Instantâneo)
-        self.root.configure(bg=COLORS["bg_primary"])
-        self.main_frame.destroy()
-        self._setup_ui()
-        
-        # Restaura a página que estava ativa
-        self.sidebar.set_active(current_page)
-        self._navigate(current_page)
-    def _on_clear_cache(self):
-        messagebox.showinfo("Configurações", "Em breve: Limpeza do banco de dados de cache local (niquests).")
+      except Exception as e:
+        err_msg = str(e)
+        self.root.after(
+          0, lambda: messagebox.showerror("Erro", f"Falha na busca: {err_msg}")
+        )
 
-    def _on_toggle_setting(self, setting_key):
-        messagebox.showinfo("Configurações", f"Em breve: Alternar preferência '{setting_key}'.")
+    self._run_in_worker(run_search)
+
+  def _on_object_select(self, item):
+    """Ação ao clicar em um objeto na lista de busca."""
+    # Muda a navegação visual para 'conditions'
+    self.sidebar.set_active("conditions")
+    self._navigate("conditions")
+
+    if not self.current_location:
+      messagebox.showwarning("Aviso", "Selecione um local primeiro.")
+      return
+
+    # Captura os valores AGORA para evitar que o worker leia dados obsoletos
+    lat = self.current_location.latitude
+    lon = self.current_location.longitude
+    name = self.current_location.name
+
+    # Feedback visual imediato
+    self.frames["conditions"].update_display(
+      {
+        "is_object_context": True,
+        "title": f"Carregando: {item['name']}...",
+        "subtitle": "Consultando condições para este objeto...",
+      }
+    )
+
+    def run_query(lat=lat, lon=lon, name=name, item=item):
+      try:
+        assert observation_service is not None
+        result = observation_service.get_conditions(lat, lon, name)
+
+        selected_planet = [p for p in result.planets if p.name == item["name"]]
+
+        ui_data = {
+          "is_object_context": True,
+          "location": result.location,
+          "score": result.score,
+          "status": result.status,
+          "title": f"Observando: {item['name']}",
+          "subtitle": f"{item['type']} — {item['details']}",
+          "metrics": {
+            "cloud_cover": result.metrics.cloud_cover,
+            "seeing": result.metrics.seeing,
+            "humidity": result.metrics.humidity,
+            "moon_phase": result.metrics.moon_phase,
+          },
+          "planets": [
+            {"name": p.name, "detail": p.detail, "status": p.status}
+            for p in (selected_planet if selected_planet else result.planets)
+          ],
+        }
+        self.root.after(0, lambda: self.frames["conditions"].update_display(ui_data))
+
+      except Exception as e:
+        err_msg = str(e)
+        self.root.after(
+          0, lambda: messagebox.showerror("Erro", f"Falha ao carregar dados: {err_msg}")
+        )
+
+    self._run_in_worker(run_query)
+
+  def _on_conditions_back(self):
+    """Ação ao clicar no botão voltar na tela de condições (quando olhando um objeto)."""
+    # Restaura a visão geral com dados reais em vez de dummy data
+    self._update_conditions_data()
+    self.sidebar.set_active("objects")
+    self._navigate("objects")
+
+  def _on_add_location(self):
+    """Abre prompt de busca, consulta o ObservationService e salva no banco de dados."""
+    query = simpledialog.askstring(
+      "Adicionar Local", "Digite o nome da cidade (ex: São Paulo):"
+    )
+    if not query or not query.strip():
+      return
+
+    search_term = query.strip()
+
+    def run_add(term=search_term):
+      try:
+        assert observation_service is not None
+        result = observation_service.search_location(term)
+        if result:
+          # Devolve a escrita no banco para a thread principal (evita SQLite cross-thread)
+          loc_name = result.name
+          loc_lat = result.latitude
+          loc_lon = result.longitude
+          loc_country = result.country
+
+          def do_register(name=loc_name, lat=loc_lat, lon=loc_lon, country=loc_country):
+            self.location_service.register(
+              name=name,
+              latitude=lat,
+              longitude=lon,
+            )
+            messagebox.showinfo(
+              "Sucesso", f"Local '{name}' ({country}) salvo com sucesso!"
+            )
+            # Atualiza a lista de locais se estiver na aba
+            if self.sidebar.active_page == "locations":
+              self._load_locations()
+
+          self.root.after(0, do_register)
+        else:
+          self.root.after(
+            0,
+            lambda: messagebox.showerror(
+              "Erro", f"Não foi possível encontrar a cidade '{term}'."
+            ),
+          )
+      except Exception as e:
+        err_msg = str(e)
+        self.root.after(
+          0,
+          lambda: messagebox.showerror("Erro", f"Falha ao adicionar local: {err_msg}"),
+        )
+
+    self._run_in_worker(run_add)
+
+  def _on_toggle_theme(self):
+    """Altera entre o modo Claro e Escuro reconstruindo a interface de forma rápida."""
+    toggle_theme()
+    current_page = self.sidebar.active_page
+
+    # Atualiza raiz e recria os componentes (Instantâneo)
+    self.root.configure(bg=COLORS["bg_primary"])
+    self.main_frame.destroy()
+    self._setup_ui()
+
+    # Restaura a página que estava ativa
+    self.sidebar.set_active(current_page)
+    self._navigate(current_page)
+
+    # Recarrega os dados nas views reconstruídas
+    if self.current_location:
+      self._update_conditions_data()
+    self._load_locations()
+
+  def _on_clear_cache(self):
+    messagebox.showinfo(
+      "Configurações", "Em breve: Limpeza do banco de dados de cache local (niquests)."
+    )
+
+  def _on_toggle_setting(self, setting_key):
+    messagebox.showinfo(
+      "Configurações", f"Em breve: Alternar preferência '{setting_key}'."
+    )

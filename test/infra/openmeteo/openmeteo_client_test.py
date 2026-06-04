@@ -71,14 +71,15 @@ def test_weather_data_response_success(mock_client: MagicMock):
   assert response.is_day is True
 
 
-@patch("sky_observer.infra.openmeteo.client.niquests_cache.CachedSession")
-def test_search_location_success(mock_cached_session_cls: MagicMock):
+@patch("sky_observer.infra.openmeteo.client.niquests.Session")
+def test_search_location_success(mock_session_cls: MagicMock):
   # Arrange
   mock_http_response = MagicMock()
 
   mock_http_response.json.return_value = {
     "results": [
       {
+        "name": "Teresina",
         "latitude": -5.0892,
         "longitude": -42.8019,
         "elevation": 72.0,
@@ -94,8 +95,7 @@ def test_search_location_success(mock_cached_session_cls: MagicMock):
 
   mock_session_instance = MagicMock()
   mock_session_instance.get.return_value = mock_http_response
-
-  mock_cached_session_cls.return_value = mock_session_instance
+  mock_session_cls.return_value = mock_session_instance
 
   client = OpenMeteoClient()
 

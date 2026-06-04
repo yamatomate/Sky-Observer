@@ -12,7 +12,6 @@ class ObjectsView(tk.Frame):
         # Guarda referências de elementos interativos (campo de busca e botão)
         self.widgets = {}
         self._build()
-        self._load_dummy_data()
 
     def _build(self):
         self._create_topbar()
