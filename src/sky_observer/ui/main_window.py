@@ -3,10 +3,9 @@ import threading
 import tkinter as tk
 import tkinter.messagebox as messagebox
 import tkinter.simpledialog as simpledialog
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from sky_observer.db.location_service import LocationService
-from sky_observer.services.observation_service import ObservationService
 from sky_observer.ui.components.sidebar import Sidebar
 from sky_observer.ui.theme import COLORS, toggle_theme
 from sky_observer.ui.views.conditions_view import ConditionsView
@@ -14,7 +13,10 @@ from sky_observer.ui.views.locations_view import LocationsView
 from sky_observer.ui.views.objects_view import ObjectsView
 from sky_observer.ui.views.settings_view import SettingsView
 
-observation_service: ObservationService | None = None
+if TYPE_CHECKING:
+  from sky_observer.services.observation_service import ObservationService
+
+observation_service: "ObservationService | None" = None
 
 
 @final
@@ -74,8 +76,13 @@ class MainWindow:
 
   def _worker_loop(self):
     """Loop do worker thread dedicado. Cria o ObservationService nesta thread
-    para que o SQLite do niquests_cache seja acessado sempre da mesma thread."""
+    para que o SQLite do niquests_cache seja acessado sempre da mesma thread.
+
+    O import do ObservationService é feito aqui (lazy) para que os módulos
+    pesados (skyfield, numpy) sejam carregados em background,
+    sem bloquear a exibição da splash screen."""
     global observation_service
+    from sky_observer.services.observation_service import ObservationService
     observation_service = ObservationService()
     while True:
       task = self._task_queue.get()

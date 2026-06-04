@@ -1,4 +1,6 @@
 # import datetime # Ruffs reclamando
+import os
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,6 +9,17 @@ from skyfield import api
 from skyfield.api import N, Timescale, W, load, wgs84
 from skyfield.framelib import ecliptic_frame
 from skyfield.timelib import Time
+
+
+def _resolve_data_path(filename: str) -> str:
+  """Resolve o caminho de arquivos de dados (.bsp) para dev e empacotado.
+
+  No PyInstaller --onefile, o arquivo é extraído em sys._MEIPASS.
+  Em dev, ele fica na raiz do projeto (CWD).
+  """
+  if getattr(sys, "frozen", False):
+    return os.path.join(sys._MEIPASS, filename)
+  return filename
 
 
 @dataclass(frozen=True)
@@ -64,7 +77,7 @@ class SkyFieldClient:
   def __init__(self) -> None:
     self.ts = load.timescale()
 
-    self.eph = api.load("de421.bsp")
+    self.eph = api.load(_resolve_data_path("de421.bsp"))
     self.observaveis = {
       "Mercúrio": self.eph["MERCURY BARYCENTER"],
       "Vênus": self.eph["VENUS BARYCENTER"],
