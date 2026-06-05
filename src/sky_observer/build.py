@@ -108,6 +108,16 @@ def build(*, console: bool = False, onedir: bool = False):
     "build",
   ]
 
+  # Localizar e incluir bibliotecas dinâmicas do Tcl/Tk no python-build-standalone (Linux/macOS)
+  if platform.system() != "Windows":
+    base_dir = Path(sys.base_prefix)
+    lib_dir = base_dir / "lib"
+    if lib_dir.exists():
+      for pattern in ["libtcl*.so*", "libtk*.so*", "libtcl*.dylib*", "libtk*.dylib*"]:
+        for f in lib_dir.glob(pattern):
+          if f.is_file():
+            cmd.extend(["--add-binary", f"{f}{sep}."])
+
   for imp in HIDDEN_IMPORTS:
     cmd.extend(["--hidden-import", imp])
   for exc in EXCLUDES:
